@@ -393,6 +393,100 @@ h workspace list | jq -e 'any(.result.workspaces[]; .label == "dark-mode") | not
 git -C "$repo" show-ref --verify --quiet refs/heads/dark-mode && fail "merged division branch not deleted"
 jq -e '.["dark-mode"] == null' "$BERTHIER_HOME/divisions.json" >/dev/null || fail "division still recorded"
 
+step "wake clears only the Agents that were working at Shutdown, not the idle ones"
+# Two fresh Agents on one turn each (so their sessions can be cleared): calm idles, busy runs a long command.
+start_agent() {
+  local p
+  p=$(h workspace create --cwd "$repo" --label "$1" --no-focus | jq -re '.result.root_pane.pane_id')
+  h pane run "$p" "claude --model haiku --settings '{\"permissions\":{\"allow\":[\"Bash\"]}}'" >/dev/null
+  for _ in $(seq 30); do h agent get "$p" >/dev/null 2>&1 && break; sleep 1; done
+  h agent wait "$p" --until idle --timeout 20000 >/dev/null 2>&1 || { # a folder trust dialog
+    h agent send-keys "$p" down enter >/dev/null
+    h agent wait "$p" --until idle --timeout 60000 >/dev/null
+  }
+  for try in 1 2 3; do
+    h agent prompt "$p" "Reply with just: pong" --wait --timeout 90000 >/dev/null 2>&1 && break
+    ((try < 3)) || fail "$1 never took its first prompt"
+    sleep 3
+  done
+  echo "$p"
+}
+calm=$(start_agent calm) busy=$(start_agent busy)
+h agent prompt "$busy" "Run this bash command, then reply with just: done. Command: sleep 45" >/dev/null
+h agent wait "$busy" --until working --timeout 60000 >/dev/null
+sleep 3
+bin/berthier tick
+jq -e --arg b "$busy" --arg c "$calm" '.agents[$b].status == "working" and (.agents[$c].status | IN("idle", "done"))' "$BERTHIER_HOME/state.json" >/dev/null || fail "busy not working and calm idle before the Shutdown: $(jq -c --arg b "$busy" --arg c "$calm" '[.agents[$b].status, .agents[$c].status]' "$BERTHIER_HOME/state.json")"
+bin/berthier shutdown "e2e" >/dev/null
+h agent wait "$busy" --timeout 120000 >/dev/null # the command ends, the Shutdown follows
+for _ in $(seq 60); do # every Agent takes its Shutdown, then settles
+  bin/berthier tick
+  ls "$BERTHIER_HOME"/inbox/*shutdown* >/dev/null 2>&1 || break
+  sleep 2
+done
+ls "$BERTHIER_HOME"/inbox/*shutdown* >/dev/null 2>&1 && fail "Shutdown not delivered to everyone: $(ls "$BERTHIER_HOME/inbox"; tail -5 "$BERTHIER_HOME/loop.log")"
+h agent wait "$busy" --timeout 120000 >/dev/null
+h agent wait "$calm" --timeout 120000 >/dev/null
+sleep 3
+bin/berthier tick
+sid_of() { jq -r --arg p "$1" '.agents[$p].session_id' "$BERTHIER_HOME/state.json"; }
+calm_sid=$(sid_of "$calm") busy_sid=$(sid_of "$busy")
+mark=$(wc -l <"$BERTHIER_HOME/loop.log")
+out=$(bin/berthier wake)
+echo "$out"
+for _ in $(seq 60); do
+  bin/berthier tick
+  ls "$BERTHIER_HOME"/inbox/*wake* >/dev/null 2>&1 || break
+  sleep 2
+done
+tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$work/since"
+(($(logged '.kind == "delivered" and (.msg | startswith("woke ")) and .to == "calm"' "" "$work/since") == 0)) || fail "Wake cleared the idle calm: $(cat "$work/since")"
+(($(logged '.kind == "delivered" and (.msg | startswith("woke ")) and .to == "busy"' "" "$work/since") == 1)) || fail "Wake did not wake busy: $(cat "$work/since")"
+bin/berthier tick
+[[ $(sid_of "$calm") == "$calm_sid" ]] || fail "calm's session changed: it was cleared"
+[[ $(sid_of "$busy") != "$busy_sid" ]] || fail "busy's session did not change: it was not cleared"
+grep -q '^woken (had work going, by shutdown): .*busy' <<<"$out" || fail "wake does not say it woke busy: $out"
+grep -q '^skipped (idle, left untouched): .*calm' <<<"$out" || fail "wake does not say it skipped calm: $out"
+h workspace close "$(h pane get "$busy" | jq -re '.result.pane.workspace_id')" >/dev/null
+h workspace close "$(h pane get "$calm" | jq -re '.result.pane.workspace_id')" >/dev/null
+
+step "corps-retire refuses a dirty Corps, then retires it; corps-reopen brings it back"
+retiree=$work/retiree
+mkdir -p "$retiree" && git -C "$retiree" init -q && git -C "$retiree" commit -q --allow-empty -m init
+rpane=$(h workspace create --cwd "$retiree" --label retiree --no-focus | jq -re '.result.root_pane.pane_id')
+h agent start retiree --kind claude --pane "$rpane" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+  h agent send-keys retiree down enter >/dev/null
+  h agent wait retiree --until idle --timeout 60000 >/dev/null
+}
+for try in 1 2 3; do
+  h agent prompt retiree "Reply with just: pong" --wait --timeout 90000 >/dev/null 2>&1 && break
+  ((try < 3)) || fail "retiree never took its first prompt"
+  sleep 3
+done
+bin/berthier tick
+echo wip >"$retiree/wip.txt"
+out=$(bin/berthier corps-retire retiree 2>&1) && fail "a dirty Corps was retired"
+[[ $out == *"dirty tree"* ]] || fail "dirty refusal unclear: $out"
+h workspace list | jq -e 'any(.result.workspaces[]; .label == "retiree")' >/dev/null || fail "refused retire closed the workspace"
+rm "$retiree/wip.txt"
+bin/berthier corps-retire retiree
+h workspace list | jq -e 'any(.result.workspaces[]; .label == "retiree") | not' >/dev/null || fail "retired Corps still has a workspace"
+bin/berthier tick
+jq -e '[.corps[].name] | index("retiree") == null' "$BERTHIER_HOME/state.json" >/dev/null || fail "retired Corps still in the state"
+out=$(HERDR_PANE_ID=$helper bin/berthier ask retiree "hi" 2>&1) && fail "ask to a retired Corps was queued"
+[[ $out == *"retired"* ]] || fail "ask refusal does not name it retired: $out"
+bin/berthier shutdown >/dev/null
+ls "$BERTHIER_HOME"/inbox/*shutdown* | xargs jq -r .to | grep -qx retiree && fail "Shutdown went to a retired Corps"
+rm -f "$BERTHIER_HOME"/inbox/*shutdown* "$BERTHIER_HOME/wake.json"
+bin/berthier corps-reopen retiree
+h workspace list | jq -e 'any(.result.workspaces[]; .label == "retiree")' >/dev/null || fail "reopened Corps has no workspace"
+rws=$(h workspace list | jq -re '.result.workspaces[] | select(.label == "retiree") | .workspace_id')
+rpane=$(h pane list --workspace "$rws" | jq -re '.result.panes[0].pane_id')
+for _ in $(seq 30); do h pane read "$rpane" --source recent-unwrapped --lines 200 | grep -qF "restarted fresh" && break; sleep 1; done
+h pane read "$rpane" --source recent-unwrapped --lines 200 | grep -qF "restarted fresh" || fail "reopened Main Agent was not told to rebuild"
+h workspace close "$rws" >/dev/null
+bin/berthier tick
+
 step "a Corps is warned at 80% of its weekly budget and held at 100%"
 # Quota samples as the status line would send them; the speaker is a stub.
 mkdir -p "$repo/sub"

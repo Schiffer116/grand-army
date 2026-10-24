@@ -195,7 +195,11 @@ func (e *Env) pollBoards(out core.TickOut) {
 	}
 	byBoard := map[string][]string{}
 	var boards []string
+	retired := e.ReadRetired() // their news waits (unseen) until they are reopened
 	for corps, r := range s.Corps {
+		if _, ok := retired[corps]; ok {
+			continue
+		}
 		if byBoard[r.Board] == nil {
 			boards = append(boards, r.Board)
 		}

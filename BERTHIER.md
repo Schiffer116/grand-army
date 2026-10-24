@@ -54,6 +54,13 @@ and a line in every new Brief until fixed, so no Division chases it twice.
 - Nudge: `berthier prompt <pane> "<text>"` (`-` reads stdin; confirms Claude
   took it; a bare `herdr agent prompt` can leave a draft). Refused while the
   user has a draft in that box: they are typing there, retry later.
+- Retire and reopen a Corps: the user's commands, `berthier corps-retire <corps>`
+  (refused with open Divisions, a dirty tree or unpushed commits, and says which)
+  and `corps-reopen <corps>`. A retired Corps is out of the loop, the Console,
+  shutdown/wake and asks; do not retire one yourself.
+- Shutdown / wake are the user's: Shutdown snapshots who is working, Wake clears
+  and resumes only those (idle ones are untouched). Say so if the user expects
+  an idle Agent to have been cleared.
 - Speak when you end a turn needing the user:
   `~/.claude/skills/notify-user/speak.sh "<corps>: <what>"` (loop already speaks
   blocked Agents and failed Revives).

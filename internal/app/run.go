@@ -28,12 +28,18 @@ func die(format string, a ...any) error { return fmt.Errorf(format, a...) }
 const usageText = `usage: berthier <command> [args]
 
 corps-new <name> <dir> [brief]      create a Corps workspace with a Main Agent
+corps-retire <corps>                (the user's) stop a Corps's Main Agent and close its workspace, keeping its record, Notes and Board
+                                    card; refused with open Divisions, a dirty tree or unpushed commits. A retired Corps is left out
+                                    of the Main Loop, Console, shutdown/wake and asks
+corps-reopen <corps>                (the user's) bring a retired Corps back: a workspace in its dir, a Main Agent rebuilding from
+                                    Notes, Board and git
 adopt <workspace> <corps>           make an existing workspace a Division of a Corps
 board <corps> [--adopt <board-id>]  give a Corps its Board: an existing Skipli board, else a card on the Grand Army Board;
                                     the Main Loop hands its Main Agent new tasks added there (corps-new does this itself)
-division-new <name> [--model <m>] [--artifact] <brief>
+division-new <name> [--model <m>] [--artifact] <brief>|-
                                     (Main Agent) spawn a Division: a worktree workspace with its own Agent
-                                    on --model (default $BERTHIER_DIVISION_MODEL, haiku); no Artifact unless --artifact
+                                    on --model (default $BERTHIER_DIVISION_MODEL, haiku); no Artifact unless --artifact;
+                                    - reads the Brief from stdin; a blank Brief is refused
 land <division>                     (Berthier) merge a Division of Berthier into master, check, rebuild, restart
                                     the changed services and wait until they work; refuses on conflict or failure
 division-done <name>                (Main Agent) remove a spawned Division once the user reviewed it
@@ -42,8 +48,10 @@ demo <url> [label]                (any Agent) where this Agent's demo or preview
                                     --clear [url] drops one (or all), --list prints them
 ask <corps> "<request>"             (any Agent) request work from another Corps, delivered when it is idle
 notify <corps> "<text>"             (service, no pane needed) one-way message to a Corps's Main Agent, no reply expected
-shutdown [text]                     (the user's, army-wide) tell every Agent with a live pane (Frozen skipped) to wrap up: park, commit+push WIP, report, update notes
-wake                                (the user's, army-wide) /clear every such Agent, then tell it to rebuild and resume, after a restart
+shutdown [text]                     (the user's, army-wide) tell every Agent with a live pane (Frozen skipped) to wrap up: park, commit+push WIP, report, update notes;
+                                    first snapshots which Agents are working
+wake                                (the user's, army-wide) /clear only the Agents that were working at Shutdown (else, before the restart),
+                                    then tell each to rebuild and resume; idle ones are left untouched; prints who was woken and skipped
 prompt <pane> <text>|-              prompt the Agent in a pane and make sure Claude took it (not a bare herdr agent prompt);
                                     - reads the text from stdin
 last <pane>                         the Claude Agent's latest assistant message, from its transcript (no pane read)
@@ -131,6 +139,8 @@ var commands map[string]command
 func init() {
 	commands = map[string]command{
 		"corps-new":          cmdCorpsNew,
+		"corps-retire":       cmdCorpsRetire,
+		"corps-reopen":       cmdCorpsReopen,
 		"adopt":              cmdAdopt,
 		"board":              cmdBoard,
 		"army":               cmdArmy,

@@ -158,7 +158,7 @@ var logTags = map[string]string{
 	"revived": "revive", "revive_failed": "revive", "revive_skipped": "revive", "forgot": "forget",
 	"spoke": "speak", "speak_failed": "speak", "escalated": "escal", "notified": "escal", "unreachable": "escal",
 	"delivered": "ask", "delivery_failed": "ask",
-	"adopted": "army", "brief_sent": "army", "brief_failed": "army", "renamed": "army", "rename_failed": "army",
+	"adopted": "army", "retired": "army", "reopened": "army", "brief_sent": "army", "brief_failed": "army", "renamed": "army", "rename_failed": "army",
 	"frozen": "revive", "fresh_started": "revive", "fresh_failed": "revive", "thaw_ignored": "revive",
 	"limit_stop": "limit", "resumed": "limit", "resume_failed": "limit", "continued": "revive", "continue_failed": "revive", "budget_exhausted": "budget",
 }

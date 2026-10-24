@@ -370,6 +370,9 @@ func cmdAsk(e *Env, args []string, io IO) error {
 	}
 	st := e.ReadState()
 	to := core.CorpsName(args[0])
+	if _, ok := e.ReadRetired()[to]; ok {
+		return die("%s", retiredMsg(to))
+	}
 	known := map[string]bool{}
 	for _, k := range st.Agents.Keys {
 		a := st.Agents.M[k]
@@ -421,6 +424,9 @@ func cmdNotify(e *Env, args []string, io IO) error {
 		return die("no Grand Army State yet; is berthier-loop running?")
 	}
 	to := core.CorpsName(args[0])
+	if _, ok := e.ReadRetired()[to]; ok {
+		return die("%s", retiredMsg(to))
+	}
 	st := e.ReadState()
 	known := false
 	for _, k := range st.Agents.Keys {
@@ -458,64 +464,6 @@ func cmdNotify(e *Env, args []string, io IO) error {
 	}
 	fmt.Fprintf(io.Out, "notified %s; delivered when its Agent is ready for input\n", to)
 	return nil
-}
-
-// --- shutdown, wake
-
-// Broadcast queues an army-wide `shutdown` or `wake` (extra: the user's own
-// words, capped like notify) as one one-way inbox file per Agent with a live
-// pane, Frozen ones skipped; the loop delivers each when its Agent is idle.
-func (e *Env) Broadcast(kind, extra string) (sent, skipped int, err error) {
-	if st, err := os.Stat(e.State); err != nil || st.Size() == 0 {
-		return 0, 0, fmt.Errorf("no Grand Army State yet; is berthier-loop running?")
-	}
-	max := 2000
-	if n, err := strconv.Atoi(e.getenv("BERTHIER_NOTIFY_MAX")); err == nil {
-		max = n
-	}
-	text, ok := core.BroadcastText(kind, extra, max)
-	if !ok {
-		return 0, 0, fmt.Errorf("unknown broadcast %q", kind)
-	}
-	st := e.ReadState()
-	to, skipped := core.BroadcastTargets(st.Agents, st.Berthier)
-	now, stamp := e.now(), e.Now().UnixNano()
-	for i, name := range to {
-		b, _ := json.Marshal(struct {
-			Kind string `json:"kind"`
-			From string `json:"from"`
-			To   string `json:"to"`
-			At   int64  `json:"at"`
-			Text string `json:"text"`
-		}{kind, "service", name, now, text})
-		if err := writeAtomic(filepath.Join(e.Inbox, fmt.Sprintf("%d-%s-%d.json", stamp, kind, i)), append(b, '\n')); err != nil {
-			return sent, skipped, err
-		}
-		sent++
-	}
-	return sent, skipped, nil
-}
-
-// cmdBroadcast is `berthier shutdown [text]` / `berthier wake`.
-func cmdBroadcast(kind string) command {
-	return func(e *Env, args []string, io IO) error {
-		if len(args) > 1 || (kind == "wake" && len(args) > 0) {
-			if kind == "wake" {
-				return die("usage: berthier wake")
-			}
-			return die(`usage: berthier shutdown ["<text>"]`)
-		}
-		extra := ""
-		if len(args) == 1 {
-			extra = args[0]
-		}
-		sent, skipped, err := e.Broadcast(kind, extra)
-		if err != nil {
-			return die("%v", err)
-		}
-		fmt.Fprintf(io.Out, "%s: queued for %d Agents; %d Frozen skipped; each gets it when idle\n", kind, sent, skipped)
-		return nil
-	}
 }
 
 // --- report
@@ -976,8 +924,8 @@ func (e *Env) callerWorkspace() (id, label string, err error) {
 // Division for a side feature, a worktree workspace labelled "<name>" on
 // branch <name> (Herdr draws it under its Corps), with its own Agent started
 // on the Brief. The Corps commands it.
-func cmdDivisionNew(e *Env, args []string, io IO) error {
-	const usage = "usage: berthier division-new <name> [--model <m>] [--artifact] <brief>"
+func cmdDivisionNew(e *Env, args []string, stdio IO) error {
+	const usage = "usage: berthier division-new <name> [--model <m>] [--artifact] <brief>|-"
 	// Flags may come anywhere; anything else beyond <name> <brief> is an error.
 	model, artifact := e.DivisionModel, false
 	var pos []string
@@ -1001,6 +949,17 @@ func cmdDivisionNew(e *Env, args []string, io IO) error {
 		return die("%s", usage)
 	}
 	name, brief := pos[0], pos[1]
+	if brief == "-" {
+		b, err := io.ReadAll(stdio.In)
+		if err != nil {
+			return err
+		}
+		brief = strings.TrimRight(string(b), "\n")
+	}
+	// An empty Brief would start an Agent with nothing to do.
+	if strings.TrimSpace(brief) == "" {
+		return die("the Brief is empty; say what the Division is to do")
+	}
 	wsID, corps, err := e.callerWorkspace()
 	if err != nil {
 		return err
@@ -1037,11 +996,11 @@ func cmdDivisionNew(e *Env, args []string, io IO) error {
 		return err
 	}
 	agent := core.Slug(corps + "-" + branch)
-	switch e.StartClaude(agent, pane, brief, branch, model, func(s string) { fmt.Fprintln(io.Err, s) }) {
+	switch e.StartClaude(agent, pane, brief, branch, model, func(s string) { fmt.Fprintln(stdio.Err, s) }) {
 	case "ready":
-		fmt.Fprintf(io.Out, "division '%s' of %s started: branch %s, pane %s, agent '%s'\n", branch, corps, branch, pane, agent)
+		fmt.Fprintf(stdio.Out, "division '%s' of %s started: branch %s, pane %s, agent '%s'\n", branch, corps, branch, pane, agent)
 	case "blocked":
-		fmt.Fprintf(io.Out, "division '%s' of %s created: pane %s, agent '%s' is waiting on a startup dialog - the user must answer it in Herdr\n", branch, corps, pane, agent)
+		fmt.Fprintf(stdio.Out, "division '%s' of %s created: pane %s, agent '%s' is waiting on a startup dialog - the user must answer it in Herdr\n", branch, corps, pane, agent)
 	default:
 		return die("division '%s' created (pane %s) but its agent did not start", branch, pane)
 	}

@@ -37,7 +37,10 @@ func (e *Env) Tick() error {
 	}
 	prev := e.ReadState()
 	now := e.now()
-	inbox := e.ReadInbox()
+	e.noteRestart(prev, now)
+	retired := e.RetiredNames()
+	// What waits for a retired Corps stays on disk until it is reopened.
+	inbox := slices.DeleteFunc(e.ReadInbox(), func(m core.Ask) bool { return slices.Contains(retired, core.CorpsName(m.To)) })
 	thaws := e.ReadThaws()
 	// Fold new quota samples into the usage record the budgets are judged on.
 	usage, err := e.UpdateUsage()
@@ -50,7 +53,7 @@ func (e *Env) Tick() error {
 	spend := e.spendBrief(usage, now)
 	decide := func(obs map[string]core.Obs) core.TickOut {
 		return core.Tick(core.TickIn{Prev: prev, Snap: snap, Now: now, Cfg: e.CoreConfig(), Divisions: divisions,
-			Inbox: inbox, Usage: usage, Budgets: budgets, Obs: obs, Spend: spend, Thaw: thaws})
+			Inbox: inbox, Usage: usage, Budgets: budgets, Obs: obs, Spend: spend, Thaw: thaws, Retired: retired})
 	}
 
 	// --- Observe what the decisions need: most ticks need nothing, else more

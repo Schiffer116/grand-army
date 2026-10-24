@@ -146,7 +146,20 @@ func TestDivisionNewArgs(t *testing.T) {
 		}
 		s.write("divisions.json", "{}")
 	}
+	// "-" reads the Brief from stdin, as prompt does; a blank Brief starts nothing.
+	if _, errs, code := s.sh("Do this.\nThen that.\n", "division-new", "fromstdin", "-"); code != 0 {
+		t.Errorf("brief from stdin: code %d %q", code, errs)
+	} else if st := s.host.CallsTo("Start"); len(st) == 0 || s.sim.Took(st[len(st)-1].Args[0]) != "[berthier brief] Do this.\nThen that." {
+		t.Errorf("brief from stdin was %q", s.sim.Took(st[len(st)-1].Args[0]))
+	}
 	starts := len(s.host.CallsTo("Start"))
+	creates := len(s.host.CallsTo("CreateWorktree"))
+	for _, c := range []struct{ stdin, brief string }{{"", ""}, {"", "  \t"}, {"", "-"}, {"\n  \n", "-"}} {
+		_, errs, code := s.sh(c.stdin, "division-new", "blank", c.brief)
+		if code != 1 || !strings.Contains(errs, "the Brief is empty") || len(s.host.CallsTo("Start")) != starts || len(s.host.CallsTo("CreateWorktree")) != creates {
+			t.Errorf("blank Brief %q (stdin %q): code %d %q", c.brief, c.stdin, code, errs)
+		}
+	}
 	for _, args := range [][]string{{"feat3", "do it", "extra"}, {"feat3", "--bogus", "do it"}, {"feat3", "do it", "--model"}, {"feat3"}, {"feat3", "--artifact"}} {
 		errs, code := run(args...)
 		if code != 1 || !strings.Contains(errs, "usage: berthier division-new") || len(s.host.CallsTo("Start")) != starts {

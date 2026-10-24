@@ -118,7 +118,8 @@ type TickIn struct {
 	Budgets   map[string]float64
 	Obs       map[string]Obs
 	Spend     SpendBrief
-	Thaw      []Thaw // the user's choices for Frozen Agents
+	Thaw      []Thaw   // the user's choices for Frozen Agents
+	Retired   []string // retired Corps (CorpsName): left out of the Main Loop
 }
 
 // SpendBrief is what the Main Loop needs of the Profile: this quota week's
@@ -260,6 +261,7 @@ func round1(f float64) string { return Num(math.Round(f*10) / 10) }
 // Tick decides one pass of the Main Loop.
 func Tick(in TickIn) TickOut {
 	cfg, now, div := in.Cfg, in.Now, in.Divisions
+	in.Snap = WithoutRetired(in.Snap, in.Retired)
 	obs := func(p string) Obs { return in.Obs[p] }
 	corpsOfLabel := func(a *Agent) string { return div.Owner(strOr(a.WorkspaceLabel, "")) }
 

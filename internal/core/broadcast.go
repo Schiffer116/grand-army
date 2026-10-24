@@ -1,6 +1,9 @@
 package core
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Army-wide broadcasts: one inbox message per Agent, delivered like a notify.
 const (
@@ -45,13 +48,56 @@ func BroadcastTargets(ag Agents, berthier *string) (to []string, skipped int) {
 		case a.Frozen != nil:
 			skipped++
 		case a.Status == "gone":
-		case berthier != nil && k == *berthier:
-			to = append(to, "berthier")
 		default:
-			if n := CorpsName(strOr(a.WorkspaceLabel, "")); n != "" {
+			if n := targetName(k, a, berthier); n != "" {
 				to = append(to, n)
 			}
 		}
 	}
 	return to, skipped
+}
+
+func targetName(pane string, a *Agent, berthier *string) string {
+	if berthier != nil && pane == *berthier {
+		return "berthier"
+	}
+	return CorpsName(strOr(a.WorkspaceLabel, ""))
+}
+
+// Working: an Agent in this status had work going, as against idle or done.
+func Working(status string) bool { return status != "idle" && status != "done" }
+
+// WorkingNames are the BroadcastTargets that have work going: what a Shutdown
+// snapshots, for a Wake to wake only them.
+func WorkingNames(ag Agents, berthier *string) []string {
+	var out []string
+	for _, k := range ag.Keys {
+		a := ag.M[k]
+		if a.Frozen != nil || a.Status == "gone" || !Working(a.Status) {
+			continue
+		}
+		if n := targetName(k, a, berthier); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// WakeSplit divides the addressees of a Wake into those that had work going
+// (awake) and the rest (idle), and lists the working ones that have no Agent
+// to wake now (absent).
+func WakeSplit(to, working []string) (awake, idle, absent []string) {
+	for _, n := range to {
+		if slices.Contains(working, n) {
+			awake = append(awake, n)
+		} else {
+			idle = append(idle, n)
+		}
+	}
+	for _, n := range working {
+		if !slices.Contains(to, n) && !slices.Contains(absent, n) {
+			absent = append(absent, n)
+		}
+	}
+	return awake, idle, absent
 }

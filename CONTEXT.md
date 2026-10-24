@@ -15,8 +15,12 @@ A Corps's running record of open threads, commitments, and recent decisions, kep
 _Avoid_: memory, journal, log
 
 **Shutdown / Wake**:
-Army-wide broadcasts by the user: Shutdown tells every Agent to park its step, push WIP, report and update Notes; Wake, after a restart, clears every Agent's context and tells it to rebuild from Notes, Board, last report, git and Brief, then resume. Frozen Agents are skipped.
+Army-wide broadcasts by the user: Shutdown tells every Agent to park its step, push WIP, report and update Notes, after snapshotting which Agents were working (not idle); Wake, after a restart, clears the context of only those and tells each to rebuild from Notes, Board, last report, git and Brief, then resume. Agents idle at Shutdown are left untouched (no clear, no prompt). With no Shutdown snapshot (a crash), Wake goes by the Agents' statuses from before the restart. Frozen Agents are skipped.
 _Avoid_: stop, pause, restart
+
+**Retire**:
+The user closes a Corps for good or for a while: its Main Agent is stopped and its workspace closed, while its record, Notes and Board card stay. A retired Corps is left out of the Main Loop, the Console, Shutdown/Wake and asks (an ask to it is refused, naming it retired) until the user reopens it: a new workspace in its directory with a Main Agent that rebuilds from Notes, Board and git, as in a Fresh Start. Refused while it has open Divisions, a dirty tree or unpushed commits.
+_Avoid_: archive, close, delete
 
 **Quota guard**:
 At 90% of the five-hour or seven-day window, each idle Agent is asked once per window for a short handoff in Notes (a quota broadcast); nothing new is started.
