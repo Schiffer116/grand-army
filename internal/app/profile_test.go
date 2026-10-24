@@ -93,7 +93,7 @@ func TestLanded(t *testing.T) {
 	git("checkout", "-q", "dev")
 	git("merge", "-q", "--ff-only", "fast-mode")
 	git("commit", "-q", "--allow-empty", "-m", "Share dialog (#28)")
-	// The Main Agent works mostly on master and is now on a feature branch
+	// The Marshal works mostly on master and is now on a feature branch
 	// grown from dev: dev, where pull requests and merges land and which it
 	// worked more than the feature branch, is the integration branch.
 	git("branch", "master", "main")
@@ -108,7 +108,7 @@ func TestLanded(t *testing.T) {
 	}
 	turns = append(turns, core.Turn{Corps: "skipli", Branch: "master"}, core.Turn{Corps: "skipli", Branch: "master"}, core.Turn{Corps: "skipli", Branch: "master"})
 	br := mainBranches(turns)
-	eq(t, "the Main Agent's branches, most worked first", br["skipli"], []string{"master", "dev", "fix/unmerged"})
+	eq(t, "the Marshal's branches, most worked first", br["skipli"], []string{"master", "dev", "fix/unmerged"})
 	got := []string{}
 	for _, x := range core.Credit(landedOn(repo, br["skipli"], "skipli", "skipli", 0), turns) {
 		got = append(got, fmt.Sprintf("%s/%s %d", x.Corps, x.Division, x.Units()))

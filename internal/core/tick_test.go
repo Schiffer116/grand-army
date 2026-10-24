@@ -353,7 +353,7 @@ func TestAsks(t *testing.T) {
 }
 
 func TestDraftHold(t *testing.T) {
-	// skipli's Main Agent is idle with an ask waiting; a Division of it is blocked (escalates to it).
+	// skipli's Marshal is idle with an ask waiting; a Division of it is blocked (escalates to it).
 	sa := snap(W, panes(ag("w1:p1", "idle", "sid-1", "", ""), ag("w2:p1", "blocked", "sid-2", "", ""), ag("w3:p1", "idle", "sid-b", "", "/home/u/berthier")),
 		panes(pn("w1:p1"), pn("w2:p1"), pn("w3:p1")))
 	prev := tick(State{}, sa, 1000, opt{}).State
@@ -552,7 +552,7 @@ func TestBudgets(t *testing.T) {
 	check(t, "under 80% is quiet", []any{r.Escalate, r.Speak, r.Events}, `[[],[],[]]`)
 	r = o(prev, sb, 1010, used(8, 0))
 	e := r.Escalate[0]
-	check(t, "80% tells the main agent", []any{len(r.Escalate), e.Key, e.To, e.Head, e.Text, e.Ev},
+	check(t, "80% tells the marshal", []any{len(r.Escalate), e.Key, e.To, e.Head, e.Text, e.Ev},
 		`[1,"budget_warn:skipli:9000","w1:p1","[berthier-loop] Weekly budget:","skipli has used 8% of the week, 80% of its 10% budget: wind down low-value work, since at 100% its Revives, usage-limit resumes and ask delivery are held",{"why":"budget_warn","reason":"80% of weekly budget","corps":"skipli","pct":80,"to":"skipli"}]`)
 	check(t, "80% speaks", []any{r.Speak[0].Key, r.Speak[0].Text}, `["speak_budget_warn:skipli:9000","skipli has used 80 percent of its weekly budget"]`)
 	p := prev
@@ -564,7 +564,7 @@ func TestBudgets(t *testing.T) {
 	p.Escalated = map[string]int64{"budget_warn:skipli:9000": 1010}
 	check(t, "next week warns again", escKeys(o(p, sb, 1020, u).Escalate), `["budget_warn:skipli:99000"]`)
 	r = o(prev, snap(W, nil, nil), 1010, used(8, 0))
-	check(t, "no main agent: berthier hears", []any{r.Escalate[0].Key, r.Escalate[0].To, r.Escalate[0].Ev["to"]}, `["budget_warn:skipli:9000",null,"berthier"]`)
+	check(t, "no marshal: berthier hears", []any{r.Escalate[0].Key, r.Escalate[0].To, r.Escalate[0].Ev["to"]}, `["budget_warn:skipli:9000",null,"berthier"]`)
 	r = o(prev, sb, 1010, used(8, 0))
 	check(t, "a division's use counts for its corps", r.Escalate[0].Ev["corps"], `"skipli"`)
 	r = tick(prev, sb, 1010, opt{usage: used(8, 0), budgets: budgets, inbox: []Ask{}, spend: SpendBrief{Waste: []WasteItem{
@@ -841,7 +841,7 @@ func TestFrozenRouting(t *testing.T) {
 	blocked := snap(W, panes(ag("w1:p1", "idle", "sid-1", "", ""), ag("w2:p1", "blocked", "sid-2", "", ""), berthier), panes(pn("w1:p1"), pn("w2:p1"), pn("w3:p1")))
 	f.Agents.M["w2:p1"].Status, f.Agents.M["w2:p1"].StatusSince = "blocked", 1000
 	o := tick(f, blocked, 1200, opt{divs: dv})
-	check(t, "a Frozen Main Agent commands nothing: its Division's trouble goes to Berthier", []any{escKeys(o.Escalate), o.Escalate[0].To}, `[["blocked:w2:p1:1000"],null]`)
+	check(t, "a Frozen Marshal commands nothing: its Division's trouble goes to Berthier", []any{escKeys(o.Escalate), o.Escalate[0].To}, `[["blocked:w2:p1:1000"],null]`)
 
 	// Berthier Frozen: its escalations go to the user instead.
 	fb := cloneState(prev)

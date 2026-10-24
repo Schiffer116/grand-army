@@ -12,7 +12,7 @@ import (
 )
 
 // Notes: a Corps's open threads, commitments and recent decisions, kept with
-// its Board so a new session of its Main Agent continues where the last one
+// its Board so a new session of its Marshal continues where the last one
 // stopped. Only berthier touches the store (NotesStore, Army-wide).
 
 // notesStore keeps every Corps's Notes.

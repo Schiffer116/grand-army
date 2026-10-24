@@ -28,6 +28,8 @@ func TestSessionStart(t *testing.T) {
 	fakeSkipli(t, s)
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "BERTHIER.md"), []byte("# You are Berthier\n\nPersona line.\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "MARSHAL.md"), []byte("# You are a Marshal\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "GENERAL.md"), []byte("# You are a General\n"), 0o644)
 	s.env["BERTHIER_ROOT"] = root
 	s.env["CLAUDE_CODE_SESSION_ID"] = "writer"
 	e := s.load()
@@ -51,16 +53,16 @@ func TestSessionStart(t *testing.T) {
 	eq(t, "root gets persona and Notes", got, "# You are Berthier\n\nPersona line.\n\n# berthier's Notes\n\nnotes of berthier\n")
 	eq(t, "the read is recorded", strings.Contains(s.read("state/notes-read.json")+s.read("notes-read.json"), "s1"), true)
 
-	// A Corps's Main Agent: its Corps's Notes only.
+	// A Corps's Marshal: its instructions, then its Corps's Notes.
 	fakeWorkspace(t, s, "w1", "demo")
-	eq(t, "Corps gets its Notes", start(t.TempDir(), "s2"), "# demo's Notes\n\nnotes of demo\n")
+	eq(t, "Marshal gets MARSHAL.md and its Notes", start(t.TempDir(), "s2"), "# You are a Marshal\n\n# demo's Notes\n\nnotes of demo\n")
 
-	// A Division, an unknown workspace, no workspace: nothing.
+	// A General: its instructions only, no Notes.
 	s.write("divisions.json", `{"dark-mode":{"corps":"demo","worktree":true}}`)
 	fakeWorkspace(t, s, "w1", "dark-mode")
-	eq(t, "Division prints nothing", start(t.TempDir(), "s3"), "")
+	eq(t, "General gets GENERAL.md", start(t.TempDir(), "s3"), "# You are a General\n\n")
 	fakeWorkspace(t, s, "w1", "nobody")
-	eq(t, "a Corps without Notes prints nothing", start(t.TempDir(), "s3"), "")
+	eq(t, "a Marshal without Notes gets MARSHAL.md", start(t.TempDir(), "s3"), "# You are a Marshal\n\n")
 	delete(s.env, "FAKE_HOST_WORKSPACE")
 	eq(t, "outside the Army prints nothing", start(t.TempDir(), "s3"), "")
 

@@ -172,7 +172,7 @@ type Resume struct {
 	Ev      Fields `json:"ev"`
 }
 
-// Escalation goes to a Main Agent (To is its pane; nil: Berthier), or, for
+// Escalation goes to a Marshal (To is its pane; nil: Berthier), or, for
 // Berthier's own trouble, to the user.
 type Escalation struct {
 	Key    string  `json:"key"`
@@ -837,7 +837,7 @@ func Tick(in TickIn) TickOut {
 			Fields{"corps": b.corps}})
 	}
 
-	// --- Each Corps's Main Agent: a live Agent in the Corps's own workspace.
+	// --- Each Corps's Marshal: a live Agent in the Corps's own workspace.
 	mainOf := map[string]string{} // by workspace label
 	{
 		byLabel := map[string][]string{}
@@ -864,7 +864,7 @@ func Tick(in TickIn) TickOut {
 		}
 	}
 
-	// --- Warning level reached: the Corps's Main Agent hears (Berthier when it has none).
+	// --- Warning level reached: the Corps's Marshal hears (Berthier when it has none).
 	warnAt := cfg.BudgetWarn
 	if warnAt == 0 {
 		warnAt = 80
@@ -915,7 +915,7 @@ func Tick(in TickIn) TickOut {
 		}
 		if berthier != nil && k == *berthier {
 			addr = append(addr, addressable{k, a.Status, "berthier", "berthier"})
-			// Berthier is also the Main Agent of the Corps of its own repo (its Board messages are addressed to that).
+			// Berthier is also the Marshal of the Corps of its own repo (its Board messages are addressed to that).
 			if l := CorpsName(strOr(a.WorkspaceLabel, "")); l != "" && l != "berthier" {
 				addr = append(addr, addressable{k, a.Status, "berthier", l})
 			}
@@ -970,7 +970,7 @@ func Tick(in TickIn) TickOut {
 		where := strOr(v.WorkspaceLabel, v.WorkspaceID)
 		who := fmt.Sprintf("agent '%s' in %s (pane %s)", strOr(v.Name, "-"), where, pane)
 		label := strOr(v.WorkspaceLabel, "")
-		// A Division's trouble goes to its Corps's Main Agent, which commands it.
+		// A Division's trouble goes to its Corps's Marshal, which commands it.
 		var to *string
 		if div.IsDivision(label) {
 			if p, ok := mainOf[div[CorpsName(label)].Corps]; ok {
@@ -988,7 +988,7 @@ func Tick(in TickIn) TickOut {
 		// A spawned Division that stops may be done: its Corps reviews it.
 		case div[CorpsName(label)].Worktree && (v.Status == "idle" || v.Status == "done") &&
 			strOr(v.PrevStatus, "") == "working" && age >= cfg.DivisionSettle:
-			why, reason = "division_stopped", "division agent stopped working (finished or stalled)"
+			why, reason = "division_stopped", "division general stopped working (finished or stalled)"
 		default:
 			continue
 		}

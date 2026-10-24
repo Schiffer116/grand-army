@@ -144,7 +144,7 @@ func (e *Env) Tick() error {
 		}
 	}
 
-	// --- Escalate: a Division's events go to its Corps's Main Agent, the rest
+	// --- Escalate: a Division's events go to its Corps's Marshal, the rest
 	// to Berthier, one prompt each. Fall back to the user if the target cannot
 	// take it.
 	e.escalate(out)
@@ -170,7 +170,7 @@ func (e *Env) Tick() error {
 		}
 	}
 
-	// --- Boards: new work for the Main Agents (after the rest, so a slow skipli never delays a Revive).
+	// --- Boards: new work for the Marshals (after the rest, so a slow skipli never delays a Revive).
 	e.pollBoards(out)
 
 	return writeJSONAtomic(e.State, out.State, true)

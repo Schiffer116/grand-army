@@ -71,7 +71,7 @@ func TestBoardPending(t *testing.T) {
 	check(t, "card by name", []any{id, ok}, `["c2",true]`)
 }
 
-// A board message is delivered like a notify: to the Main Agent when idle,
+// A board message is delivered like a notify: to the Marshal when idle,
 // held while it works, as it is written, never stuck, never in the ask log.
 func TestBoardDelivery(t *testing.T) {
 	sa := snap(W, panes(ag("w1:p1", "idle", "sid-1", "", ""), ag("w4:p1", "working", "sid-4", "", "")), panes(pn("w1:p1"), pn("w4:p1")))
@@ -85,7 +85,7 @@ func TestBoardDelivery(t *testing.T) {
 	b2 := Ask{ID: "board-notes-t2", Kind: "board", From: "skipli", To: "notes", Text: "x", At: 100}
 	o = tick(prev, sa, 2000, opt{inbox: []Ask{b2}})
 	check(t, "held while its Corps works or is absent", []any{len(o.Deliver), escKeys(o.Escalate)}, `[0,[]]`)
-	// Berthier's pane is also the Main Agent of the Corps named after its workspace.
+	// Berthier's pane is also the Marshal of the Corps named after its workspace.
 	sb := snap(W, panes(ag("w4:p1", "idle", "sid-b", "", "/home/u/berthier")), panes(pn("w4:p1")))
 	b3 := Ask{ID: "board-notes-t3", Kind: "board", From: "skipli", To: "notes", Text: "y", At: 100}
 	if o = tick(State{}, sb, 2000, opt{inbox: []Ask{b3}}); len(o.Deliver) != 1 || o.Deliver[0].PaneID != "w4:p1" {

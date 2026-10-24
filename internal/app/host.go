@@ -46,8 +46,8 @@ func (e *Env) Snapshot() (core.Snapshot, error) { return e.Host.Snapshot() }
 func (e *Env) notify(title, body string) { e.Host.Notify(title, body) }
 
 // launchOpts is how Claude starts in the workspace labelled label: its model,
-// and what its role allows. A Division's Agent may not use Artifact unless
-// division-new --artifact. A Main Agent (not a Division) with no recorded
+// and what its role allows. A Division's General may not use Artifact unless
+// division-new --artifact. A Marshal (not a Division) with no recorded
 // model runs on CorpsModel. Berthier's persona comes from the SessionStart
 // hook (`berthier session-start`), not from a flag.
 func (e *Env) launchOpts(label, model string) harness.LaunchOpts {

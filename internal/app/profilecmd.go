@@ -112,7 +112,7 @@ type landedKey struct {
 
 var landedCache sync.Map // landedKey -> []core.Landed
 
-// mainBranches lists, per Corps, the branches its Main Agent worked on, most
+// mainBranches lists, per Corps, the branches its Marshal worked on, most
 // worked first: where its integration branch is to be found.
 func mainBranches(turns []core.Turn) map[string][]string {
 	counts := map[string]map[string]int{}
@@ -157,10 +157,10 @@ func (e *Env) Landed(since float64, branches map[string][]string) []core.Landed 
 	return out
 }
 
-// landedOn reads the integration branch among the Main Agent's branches (at
+// landedOn reads the integration branch among the Marshal's branches (at
 // most four, most worked first): the one where the most pull requests and
 // merges landed, ties to the most worked (a feature branch holds its
-// base's landings too). skipli's Main Agent sits on master
+// base's landings too). skipli's Marshal sits on master
 // and feature branches, but its pull requests land on dev.
 func landedOn(root string, branches []string, corps, main string, since float64) []core.Landed {
 	if len(branches) > 4 {

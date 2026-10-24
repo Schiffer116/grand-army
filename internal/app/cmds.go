@@ -46,10 +46,17 @@ func (e *Env) ArmyView() core.ArmyView {
 }
 
 func cmdArmy(e *Env, args []string, io IO) error {
-	if len(args) != 0 {
-		return die("usage: berthier army")
+	switch len(args) {
+	case 0:
+		return encode(io.Out, e.ArmyView())
+	case 1:
+		info, err := e.AgentInfoOf(args[0])
+		if err != nil {
+			return err
+		}
+		return encode(io.Out, info)
 	}
-	return encode(io.Out, e.ArmyView())
+	return die("usage: berthier army [<pane>]")
 }
 
 // cmdCounts is the bar's compact view of `berthier army`: availability, Agent
@@ -413,7 +420,7 @@ func cmdAsk(e *Env, args []string, io IO) error {
 
 // --- notify
 
-// cmdNotify is a one-way message to a Corps's Main Agent from something that is
+// cmdNotify is a one-way message to a Corps's Marshal from something that is
 // not an Agent (a systemd service). Same inbox as `ask`, kind "notify": no
 // reply expected, never counted for ask-stuck or ping-pong. Needs no Herdr pane.
 func cmdNotify(e *Env, args []string, io IO) error {
@@ -777,8 +784,8 @@ func (e *Env) hasWorkspace(label string) (bool, error) {
 }
 
 // cmdCorpsNew creates a Corps: a Herdr workspace labelled <name> at <dir>,
-// with a Main Agent started there and given its Brief. A brand-new directory
-// becomes a git repo so the Main Agent can spawn Divisions from it.
+// with a Marshal started there and given its Brief. A brand-new directory
+// becomes a git repo so the Marshal can spawn Divisions from it.
 func cmdCorpsNew(e *Env, args []string, io IO) error {
 	if len(args) < 2 {
 		return die("usage: berthier corps-new <name> <dir> [brief]")
@@ -809,11 +816,11 @@ func cmdCorpsNew(e *Env, args []string, io IO) error {
 	agent := core.Slug(name)
 	switch e.StartClaude(agent, pane, brief, name, "", func(s string) { fmt.Fprintln(io.Err, s) }) {
 	case "ready":
-		fmt.Fprintf(io.Out, "corps '%s' ready: workspace pane %s, Main Agent '%s'\n", name, pane, agent)
+		fmt.Fprintf(io.Out, "corps '%s' ready: workspace pane %s, Marshal '%s'\n", name, pane, agent)
 	case "blocked":
-		fmt.Fprintf(io.Out, "corps '%s' created: pane %s, Main Agent '%s' is waiting on a startup dialog (likely folder trust) - the user must answer it in Herdr\n", name, pane, agent)
+		fmt.Fprintf(io.Out, "corps '%s' created: pane %s, Marshal '%s' is waiting on a startup dialog (likely folder trust) - the user must answer it in Herdr\n", name, pane, agent)
 	default:
-		return die("corps '%s' created (pane %s) but its Main Agent did not start", name, pane)
+		return die("corps '%s' created (pane %s) but its Marshal did not start", name, pane)
 	}
 	if msg, err := e.EnsureBoard(name, ""); err != nil {
 		fmt.Fprintf(io.Err, "no Board for '%s' (run `berthier board %s` later): %v\n", name, name, err)
@@ -825,7 +832,7 @@ func cmdCorpsNew(e *Env, args []string, io IO) error {
 
 // cmdBoard gives a Corps its Board: an existing one with --adopt <board-id>,
 // else a card on the Grand Army Board. The Main Loop then hands the Corps's
-// Main Agent new work added there.
+// Marshal new work added there.
 func cmdBoard(e *Env, args []string, io IO) error {
 	usage := "usage: berthier board <corps> [--adopt <board-id>]"
 	var corps, adopt string
@@ -844,7 +851,7 @@ func cmdBoard(e *Env, args []string, io IO) error {
 		return die("%s", usage)
 	}
 	if corps == "berthier" || e.ReadDivisions().IsDivision(corps) {
-		return die("'%s' is not a Corps with a Main Agent", corps)
+		return die("'%s' is not a Corps with a Marshal", corps)
 	}
 	if ok, _ := e.hasWorkspace(corps); !ok {
 		return die("no Corps '%s'", corps)
@@ -859,7 +866,7 @@ func cmdBoard(e *Env, args []string, io IO) error {
 
 // cmdAdopt makes a workspace a Division of a Corps: record its Corps in
 // state/divisions.json; the label stays. Its Agents keep running; the Corps's
-// Main Agent now commands them, and the Main Loop sends their trouble there
+// Marshal now commands them, and the Main Loop sends their trouble there
 // instead of to Berthier.
 func cmdAdopt(e *Env, args []string, io IO) error {
 	if len(args) != 2 {
@@ -901,7 +908,7 @@ func cmdAdopt(e *Env, args []string, io IO) error {
 		return err
 	}
 	e.Event("adopted", fmt.Sprintf("adopted %s into %s", child, corps), core.Fields{"corps": core.CorpsName(corps), "division": core.CorpsName(child)})
-	fmt.Fprintf(io.Out, "'%s' is now a Division of %s; brief %s's Main Agent that it commands it\n", child, corps, corps)
+	fmt.Fprintf(io.Out, "'%s' is now a Division of %s; brief %s's Marshal that it commands it\n", child, corps, corps)
 	return nil
 }
 
@@ -911,7 +918,7 @@ func (e *Env) callerWorkspace() (id, label string, err error) {
 		id = e.selfWorkspace()
 	}
 	if id == "" {
-		return "", "", die("run this from the Main Agent's pane in the Host (not in one)")
+		return "", "", die("run this from the Marshal's pane in the Host (not in one)")
 	}
 	ws, err := e.Host.Workspace(id)
 	if err != nil {
@@ -920,7 +927,7 @@ func (e *Env) callerWorkspace() (id, label string, err error) {
 	return id, ws.Label, nil
 }
 
-// cmdDivisionNew is run by a Corps's Main Agent from its own pane: spawn a
+// cmdDivisionNew is run by a Corps's Marshal from its own pane: spawn a
 // Division for a side feature, a worktree workspace labelled "<name>" on
 // branch <name> (Herdr draws it under its Corps), with its own Agent started
 // on the Brief. The Corps commands it.
@@ -1007,7 +1014,7 @@ func cmdDivisionNew(e *Env, args []string, stdio IO) error {
 	return nil
 }
 
-// cmdDivisionDone is run by a Corps's Main Agent once the user has reviewed a
+// cmdDivisionDone is run by a Corps's Marshal once the user has reviewed a
 // Division it spawned: remove the worktree workspace, and delete the branch
 // only if it is merged.
 func cmdDivisionDone(e *Env, args []string, io IO) error {

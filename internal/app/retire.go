@@ -18,7 +18,7 @@ import (
 // --- corps-retire, corps-reopen
 
 // retiredRec is a retired Corps in state/retired.json: where it lives and the
-// session of its Main Agent, for the report a reopen rebuilds from.
+// session of its Marshal, for the report a reopen rebuilds from.
 type retiredRec struct {
 	Dir     string `json:"dir"`
 	Session string `json:"session,omitempty"`
@@ -93,7 +93,7 @@ func (e *Env) blockers(corps, dir string) []string {
 	return why
 }
 
-// cmdCorpsRetire is the user's: stop a Corps's Main Agent, close its
+// cmdCorpsRetire is the user's: stop a Corps's Marshal, close its
 // workspace and leave it out of the Main Loop, the Console, Shutdown/Wake and
 // asks until `corps-reopen`. Its record, Notes and Board card stay.
 func cmdCorpsRetire(e *Env, args []string, io IO) error {
@@ -156,12 +156,12 @@ func cmdCorpsRetire(e *Env, args []string, io IO) error {
 		return die("could not close the workspace of '%s': %v", name, err)
 	}
 	e.Event("retired", "retired "+name, core.Fields{"corps": name, "why": "retired"})
-	fmt.Fprintf(io.Out, "corps '%s' retired: Main Agent stopped, workspace closed; `berthier corps-reopen %s` brings it back\n", name, name)
+	fmt.Fprintf(io.Out, "corps '%s' retired: Marshal stopped, workspace closed; `berthier corps-reopen %s` brings it back\n", name, name)
 	return nil
 }
 
 // cmdCorpsReopen brings a retired Corps back: a workspace in its directory
-// with a Main Agent that rebuilds from Notes, Board and git, as in a Fresh Start.
+// with a Marshal that rebuilds from Notes, Board and git, as in a Fresh Start.
 func cmdCorpsReopen(e *Env, args []string, io IO) error {
 	if len(args) != 1 {
 		return die("usage: berthier corps-reopen <corps>")
@@ -189,11 +189,11 @@ func cmdCorpsReopen(e *Env, args []string, io IO) error {
 	var warn string
 	switch e.startClaude(agent, pane, core.FreshPrompt(report, ""), name, e.stickyModel(name, rec.Session), func(s string) { warn = s }) {
 	case "ready":
-		fmt.Fprintf(io.Out, "corps '%s' reopened: pane %s, Main Agent '%s' rebuilding from Notes, Board and git\n", name, pane, agent)
+		fmt.Fprintf(io.Out, "corps '%s' reopened: pane %s, Marshal '%s' rebuilding from Notes, Board and git\n", name, pane, agent)
 	case "blocked":
-		fmt.Fprintf(io.Out, "corps '%s' reopened: pane %s, Main Agent '%s' is waiting on a startup dialog - the user must answer it in Herdr\n", name, pane, agent)
+		fmt.Fprintf(io.Out, "corps '%s' reopened: pane %s, Marshal '%s' is waiting on a startup dialog - the user must answer it in Herdr\n", name, pane, agent)
 	default:
-		return die("corps '%s' reopened (pane %s) but its Main Agent did not start: %s", name, pane, warn)
+		return die("corps '%s' reopened (pane %s) but its Marshal did not start: %s", name, pane, warn)
 	}
 	e.Event("reopened", "reopened "+name, core.Fields{"corps": name, "why": "reopened"})
 	return nil

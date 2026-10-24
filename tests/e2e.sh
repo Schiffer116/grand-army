@@ -37,6 +37,8 @@ step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
 # How many loop.log events match a jq condition, e.g. logged '.kind == "revived"'.
 logged() { jq -c --arg p "${2:-}" "select($1)" "${3:-$BERTHIER_HOME/loop.log}" | wc -l; }
+# The session a pane's Claude last announced through its hooks (Herdr no longer tells).
+agent_sid() { jq -rs --arg p "$1" '[.[] | select(.pane == $p)] | max_by(.seq) | .session // empty' "$BERTHIER_HOME"/agents/*.json 2>/dev/null; }
 claude_pid() { h pane process-info --pane "$1" | jq -r '.result.process_info.foreground_processes[] | select(.name == "claude") | .pid'; }
 
 cleanup() {
@@ -66,7 +68,7 @@ mkdir -p "$repo/.claude" && cp "$settings" "$repo/.claude/settings.local.json"
 pane=$(h workspace create --cwd "$repo" --label demo --no-focus | jq -re '.result.root_pane.pane_id')
 ws=$(h pane get "$pane" | jq -re '.result.pane.workspace_id')
 
-step "start a Main Agent with one turn (so its session can be resumed)"
+step "start a Marshal with one turn (so its session can be resumed)"
 # The scratch dir is new to Claude: accept its folder trust dialog for this test.
 h agent start demo-main --kind claude --pane "$pane" --timeout 60000 -- --model haiku --settings "$settings" >/dev/null 2>&1 || {
   h agent send-keys demo-main down enter >/dev/null
@@ -87,12 +89,21 @@ kill -KILL "$(claude_pid "$pane")"
 sleep 3
 bin/berthier tick
 for _ in $(seq 30); do
-  [[ $(h agent get "$pane" 2>/dev/null | jq -r '.result.agent.agent_session.value // empty') == "$sid" ]] && break
+  [[ $(agent_sid "$pane") == "$sid" ]] && claude_pid "$pane" | grep -q . && break
   sleep 1
 done
-[[ $(h agent get "$pane" | jq -r '.result.agent.agent_session.value') == "$sid" ]] || fail "agent not revived with session $sid"
+[[ $(agent_sid "$pane") == "$sid" ]] || fail "agent not revived with session $sid"
 (($(logged '.kind == "revived" and .pane == $p and .name == "demo-main"' "$pane"))) || fail "revive not logged"
 bin/berthier tick  # the loop's next pass sees the revived agent live
+
+step "the agent commands: army <pane>, check-in, keys, rename"
+bin/berthier army "$pane" | jq -e '.state == "idle" and .corps == "demo" and .name == "demo-main" and .process == "alive"' >/dev/null \
+  || fail "army <pane>: $(bin/berthier army "$pane")"
+bin/berthier check-in "$pane" | grep -q '❯' || fail "check-in shows no Claude box: $(bin/berthier check-in "$pane")"
+(($(bin/berthier check-in "$pane" --recent 30 | wc -l) > 1)) || fail "check-in --recent"
+bin/berthier keys "$pane" interrupt
+bin/berthier rename "$pane" demo-main
+h agent get demo-main >/dev/null 2>&1 || fail "rename lost the name"
 
 step "a crashed session that never saved a transcript is forgotten, not Revived"
 # `claude --resume` of it prints "No conversation found" and returns to the shell.
@@ -115,11 +126,11 @@ step "cutover: a Claude started before the hooks existed is kept as it was, not 
 # first tick must not see them vanish (the Revive would be into a live Claude).
 mkdir -p "$work/old"
 old=$(h workspace create --cwd "$work/old" --label old --no-focus | jq -re '.result.root_pane.pane_id')
-h agent start old --kind claude --pane "$old" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+old_sid=$(cat /proc/sys/kernel/random/uuid)
+h agent start old --kind claude --pane "$old" --timeout 60000 -- --model haiku --session-id "$old_sid" >/dev/null 2>&1 || {
   h agent send-keys old down enter >/dev/null
   h agent wait old --until idle --timeout 60000 >/dev/null
 }
-old_sid=$(h agent get old | jq -r '.result.agent.agent_session.value')
 old_ws=$(h pane get "$old" | jq -re '.result.pane.workspace_id')
 for f in "$BERTHIER_HOME"/agents/*.json; do jq -e --arg p "$old" '.pane == $p' "$f" >/dev/null 2>&1 && rm -f "$f"; done
 # What the old build's last tick had written for it.
@@ -179,7 +190,7 @@ claude_pid "$cold" | grep -q . && fail "Frozen agent restarted"
 out=$(frozen fresh "$cold") || fail "fresh failed: $out"
 echo "$out"
 [[ $out == *"Fresh Start: cold in $cold"* ]] || fail "fresh misreported: $out"
-new_sid=$(h agent get "$cold" | jq -r '.result.agent.agent_session.value // empty')
+new_sid=$(agent_sid "$cold")
 [[ -n $new_sid && $new_sid != "$cold_sid" ]] || fail "no new session in the pane (got '$new_sid', was $cold_sid)"
 h pane read "$cold" --source recent-unwrapped --lines 200 | grep -qF "[berthier fresh] You were restarted fresh: run berthier notes" || fail "fresh prompt not in the pane: $(h pane read "$cold" --source recent-unwrapped --lines 40; tail -5 "$BERTHIER_HOME/loop.log" | cut -c1-300; for f in "$BERTHIER_HOME"/agents/*.json; do jq -c --arg p "$cold" 'select(.pane == $p)' "$f"; done)"
 for _ in $(seq 60); do
@@ -198,7 +209,7 @@ hook=$work/hooks-stop.json
 jq --arg c "$PWD/bin/berthier hook-stop" '.hooks.Stop += [{hooks: [{type: "command", command: $c}]}]' "$settings" >"$hook"
 h agent start helper --kind claude --pane "$helper" --timeout 60000 -- --model haiku --settings "$hook" >/dev/null 2>&1
 h agent prompt helper "Reply with just: pong" --wait --timeout 120000 >/dev/null
-helper_sid=$(h agent get helper | jq -r '.result.agent.agent_session.value')
+helper_sid=$(agent_sid "$helper")
 [[ -s $BERTHIER_HOME/reports/$helper_sid.json ]] || fail "helper ended its turn without a report"
 echo "helper reported: $(jq -r .line "$BERTHIER_HOME/reports/$helper_sid.json")"
 bin/berthier tick
@@ -235,7 +246,7 @@ h agent wait demo-main --timeout 90000 >/dev/null
 h pane read "$pane" --source recent-unwrapped --lines 60 | grep -q '⎿.*\[Image #' \
   || fail "image ask not submitted: $(h pane read "$pane" --source recent-unwrapped --lines 60)"
 
-step "a notify from a service (no pane, bare PATH) reaches the idle Main Agent, multi-line, one-way"
+step "a notify from a service (no pane, bare PATH) reaches the idle Marshal, multi-line, one-way"
 env -i PATH="$PWD/bin:$HOME/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin" HOME="$HOME" BERTHIER_HOME="$BERTHIER_HOME" berthier notify demo $'Learner answered:\nline two. Reply with just: noted' >/dev/null
 for _ in $(seq 30); do # the Agent may still be answering the previous ask
   bin/berthier tick
@@ -306,7 +317,8 @@ h agent wait "$typed" --until idle --timeout 60000 >/dev/null
 h agent prompt "$typed" "Reply with just: pong" --wait --timeout 90000 >/dev/null
 h agent rename "$typed" typed >/dev/null
 bin/berthier tick
-names() { h api snapshot | jq -c '[.result.snapshot.agents[] | [.pane_id, .name, .agent_session.value]] | sort'; }
+# Berthier's own view: Herdr no longer tracks Agents, it only holds pane names.
+names() { for p in "$pane" "$helper" "$typed"; do bin/berthier army "$p" | jq -c '[.pane, .name]'; done | jq -sc 'sort'; }
 before=$(names) mark=$(wc -l <"$BERTHIER_HOME/loop.log")
 h server stop >/dev/null
 tmux kill-session -t "$session" 2>/dev/null || true
@@ -428,7 +440,7 @@ step "division-new spawns a worktree Division; division-done removes it"
 out=$(BERTHIER_WORKSPACE="$ws" bin/berthier division-new "Dark Mode" --model haiku $'Reply with just: first\nThen, on its own line: second')
 echo "$out"
 [[ $out == *" started: "* ]] || fail "division-new misreported its start"
-h agent get demo-dark-mode >/dev/null 2>&1 || fail "division agent left unnamed"
+h agent get demo-dark-mode >/dev/null 2>&1 || fail "division general left unnamed"
 h agent wait demo-dark-mode --timeout 90000 >/dev/null
 h agent read demo-dark-mode --source recent-unwrapped --lines 40 | grep -q '^  second' || fail "multi-line Brief not answered"
 h workspace list | jq -e 'any(.result.workspaces[]; .label == "dark-mode")' >/dev/null || fail "division workspace missing"
@@ -544,7 +556,7 @@ h workspace list | jq -e 'any(.result.workspaces[]; .label == "retiree")' >/dev/
 rws=$(h workspace list | jq -re '.result.workspaces[] | select(.label == "retiree") | .workspace_id')
 rpane=$(h pane list --workspace "$rws" | jq -re '.result.panes[0].pane_id')
 for _ in $(seq 30); do h pane read "$rpane" --source recent-unwrapped --lines 200 | grep -qF "restarted fresh" && break; sleep 1; done
-h pane read "$rpane" --source recent-unwrapped --lines 200 | grep -qF "restarted fresh" || fail "reopened Main Agent was not told to rebuild"
+h pane read "$rpane" --source recent-unwrapped --lines 200 | grep -qF "restarted fresh" || fail "reopened Marshal was not told to rebuild"
 h workspace close "$rws" >/dev/null
 bin/berthier tick
 
@@ -592,7 +604,7 @@ for _ in $(seq 30); do
   h pane read "$budgeted" --source recent-unwrapped --lines 100 | grep -qF "[berthier-loop] Weekly budget:" && break
   sleep 1
 done
-h pane read "$budgeted" --source recent-unwrapped --lines 100 | grep -qF "[berthier-loop] Weekly budget:" || fail "Main Agent not told"
+h pane read "$budgeted" --source recent-unwrapped --lines 100 | grep -qF "[berthier-loop] Weekly budget:" || fail "Marshal not told"
 tick
 (($(logged '.kind == "escalated" and .why == "budget_warn"') == 1)) || fail "warned more than once"
 bin/berthier budget | grep -q '^budgeted  *8%  *10%  *80%' || fail "budget shows: $(bin/berthier budget)"

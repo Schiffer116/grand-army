@@ -84,7 +84,7 @@ func TestProfileView(t *testing.T) {
 	sk := v.Corps[0]
 	check(t, "skipli", []any{sk.Name, sk.Totals.USD, sk.Units, sk.PerUnit, sk.QuotaPct, sk.Daily, sk.Origins},
 		`["skipli",9.5,6,1.5833,20,[4.5,2,3,0,0,0,0],{"ask":2,"brief":3,"user":4.5}]`)
-	check(t, "divisions: Main Agent and dark-mode, by Spend",
+	check(t, "divisions: Marshal and dark-mode, by Spend",
 		[]any{sk.Divisions[0].Name, sk.Divisions[0].Units, sk.Divisions[0].PerUnit, sk.Divisions[1].Name, sk.Divisions[1].Units, sk.Divisions[1].PerUnit},
 		`["",2,3.25,"dark-mode",4,0.75]`)
 	check(t, "sessions", []any{len(sk.Divisions[0].Sessions), sk.Divisions[0].Sessions[0].ID, sk.Divisions[0].Sessions[0].Totals.Turns, sk.Divisions[0].Sessions[0].Model},
@@ -122,7 +122,7 @@ func TestCredit(t *testing.T) {
 		{Corps: "skipli", Division: "share", Branch: "feat/share", Ships: []string{"pr 28", "commit abc1234"}},
 		{Corps: "skipli", Division: "fast", Branch: "fast", Ships: []string{"commit def5678"}},
 		{Corps: "skipli", Division: "board", Branch: "ui/board"},
-		{Corps: "skipli", Branch: "dev", Ships: []string{"commit 9999999"}}, // the Main Agent's own
+		{Corps: "skipli", Branch: "dev", Ships: []string{"commit 9999999"}}, // the Marshal's own
 		{Corps: "dotfiles", Division: "x", Ships: []string{"pr 5"}},
 	}
 	for _, tc := range []struct {

@@ -34,7 +34,7 @@ type BoardTask struct {
 // tasks than this is a suggestion to give the Corps its own Board.
 const BoardBigTasks = 10
 
-// BoardNew is a card or task the Main Agent of Corps has not been told of.
+// BoardNew is a card or task the Marshal of Corps has not been told of.
 type BoardNew struct{ Corps, Key, Text string }
 
 // BoardNews compares a board with the ids already seen on it. card is the

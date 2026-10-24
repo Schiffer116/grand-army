@@ -87,7 +87,7 @@ func TestBoards(t *testing.T) {
 	e.pollBoards(out)
 	eq(t, "seed is silent", s.boardNews(), "[]")
 
-	// --- new work is queued once; the Corps's Main Agent gets it, nothing else does
+	// --- new work is queued once; the Corps's Marshal gets it, nothing else does
 	appendLine(t, filepath.Join(sk, "tasks"), dot+"|t-new|fix the unit|pending")
 	appendLine(t, filepath.Join(sk, "tasks"), "c-ui|t-ui1|dark mode|pending")
 	appendLine(t, filepath.Join(sk, "cards"), "own1|c-new|Mobile")

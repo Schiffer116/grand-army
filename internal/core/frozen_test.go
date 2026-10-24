@@ -31,6 +31,6 @@ func TestFreshPrompt(t *testing.T) {
 		t.Errorf("fresh prompt: %q", p)
 	}
 	if p := FreshPrompt("", ""); strings.Contains(p, "\n") {
-		t.Errorf("a Main Agent's fresh prompt: %q", p)
+		t.Errorf("a Marshal's fresh prompt: %q", p)
 	}
 }

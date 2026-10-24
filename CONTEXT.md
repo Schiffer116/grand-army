@@ -11,7 +11,7 @@ The chief-of-staff agent: whichever coding agent runs in Berthier's own reposito
 _Avoid_: orchestrator, controller, first mate
 
 **Notes**:
-A Corps's running record of open threads, commitments, and recent decisions, kept with its Board so any new session of its Main Agent (Berthier included) continues exactly where the last one stopped. How the user works is kept separately, in instructions.
+A Corps's running record of open threads, commitments, and recent decisions, kept with its Board so any new session of its Marshal (Berthier included) continues exactly where the last one stopped. How the user works is kept separately, in instructions.
 _Avoid_: memory, journal, log
 
 **Shutdown / Wake**:
@@ -19,7 +19,7 @@ Army-wide broadcasts by the user: Shutdown tells every Agent to park its step, p
 _Avoid_: stop, pause, restart
 
 **Retire**:
-The user closes a Corps for good or for a while: its Main Agent is stopped and its workspace closed, while its record, Notes and Board card stay. A retired Corps is left out of the Main Loop, the Console, Shutdown/Wake and asks (an ask to it is refused, naming it retired) until the user reopens it: a new workspace in its directory with a Main Agent that rebuilds from Notes, Board and git, as in a Fresh Start. Refused while it has open Divisions, a dirty tree or unpushed commits.
+The user closes a Corps for good or for a while: its Marshal is stopped and its workspace closed, while its record, Notes and Board card stay. A retired Corps is left out of the Main Loop, the Console, Shutdown/Wake and asks (an ask to it is refused, naming it retired) until the user reopens it: a new workspace in its directory with a Marshal that rebuilds from Notes, Board and git, as in a Fresh Start. Refused while it has open Divisions, a dirty tree or unpushed commits.
 _Avoid_: archive, close, delete
 
 **Quota guard**:
@@ -38,16 +38,24 @@ One Host workspace, whatever it contains; it need not be a git repository. Same 
 _Avoid_: project, herdr session, campaign, repo, folder
 
 **Division**:
-A sub-unit of a Corps, with its own Agent; Berthier records which Corps it belongs to. The Host nests a spawned one under its Corps. It is either a worktree the Main Agent spawns for a side feature, which ends once the user has reviewed it, or an existing workspace the Corps adopted, which lasts. A spawned one runs on a model its Corps picks (`division-new --model`, default `BERTHIER_DIVISION_MODEL`, haiku), kept across Revives (a Corps's Main Agent runs on `BERTHIER_CORPS_MODEL`, opus); its Agent has no Artifact unless `division-new --artifact`. The Corps's Main Agent commands it: assigns and reviews its work, and receives its Escalations.
+A sub-unit of a Corps, with its own General; Berthier records which Corps it belongs to. The Host nests a spawned one under its Corps. It is either a worktree the Marshal spawns for a side feature, which ends once the user has reviewed it, or an existing workspace the Corps adopted, which lasts. A spawned one runs on a model its Corps picks (`division-new --model`, default `BERTHIER_DIVISION_MODEL`, haiku), kept across Revives (a Corps's Marshal runs on `BERTHIER_CORPS_MODEL`, opus); its General has no Artifact unless `division-new --artifact`. The Corps's Marshal commands it: assigns and reviews its work, and receives its Escalations.
 _Avoid_: task, sub-project, child, team
 
 **Agent**:
 One coding-agent session in a Host pane inside a Corps, whether the user or Berthier started it.
 _Avoid_: worker, crewmate, bot
 
-**Main Agent**:
+**Marshal**:
 The Agent working a Corps on its main branch, in the Corps's own workspace; it decides when to spawn Divisions.
-_Avoid_: lead, primary
+_Avoid_: Main Agent, lead, primary
+
+**General**:
+The Agent of a Division: it works the Division's branch on a Brief from its Marshal and reports to it. It has no Board and spawns no Divisions.
+_Avoid_: sub-agent, worker
+
+**Land**:
+Merge a finished Division's branch into master, run the checks, rebuild, and restart what changed (`berthier land`). Master is left untouched when the merge conflicts or a check fails.
+_Avoid_: ship, deploy
 
 **Grand Army**:
 Every Agent currently known to Berthier, after Napoleon's Grande Armée, whose chief of staff was Berthier.
@@ -60,11 +68,11 @@ _Avoid_: status file, snapshot
 ### Work
 
 **Brief**:
-The initial instructions handed to a new Agent (by Berthier to a Main Agent, or by a Main Agent to a Division's Agent): the goal and what done looks like.
+The initial instructions handed to a new Agent (by Berthier to a Marshal, or by a Marshal to a General): the goal and what done looks like.
 _Avoid_: orders, prompt, task description
 
 **Board**:
-The Skipli board a Corps works from (Development environment for now): its own, or its card on the Grand Army Board. The user adds work there; the Corps shows its plan and progress there. Only the Corps's Main Agent changes its work items; its Divisions report to the Main Agent as usual. A work item is done when all its tasks are; only the user deletes finished work.
+The Skipli board a Corps works from (Development environment for now): its own, or its card on the Grand Army Board. The user adds work there; the Corps shows its plan and progress there. Only the Corps's Marshal changes its work items; its Divisions report to the Marshal as usual. A work item is done when all its tasks are; only the user deletes finished work.
 _Avoid_: backlog, kanban, todo list
 
 **Grand Army Board**:
@@ -98,7 +106,7 @@ A prompt Berthier sends to a live Agent to get it moving again.
 _Avoid_: ping, poke
 
 **Budget**:
-The share of the account's weekly (seven-day) quota a Corps may use, set with `berthier budget`. Soft: at 80% the Corps's Main Agent and the user are told once per week; at 100% the Main Loop holds that Corps's and its Divisions' Revives, usage-limit resumes and ask delivery, and nothing else. Each rise in the account's weekly usage is split by the Spend of the turns since the last rise; a Division counts toward its Corps, Berthier's own Spend is Command overhead, Spend nobody's turns explain counts toward "other".
+The share of the account's weekly (seven-day) quota a Corps may use, set with `berthier budget`. Soft: at 80% the Corps's Marshal and the user are told once per week; at 100% the Main Loop holds that Corps's and its Divisions' Revives, usage-limit resumes and ask delivery, and nothing else. Each rise in the account's weekly usage is split by the Spend of the turns since the last rise; a Division counts toward its Corps, Berthier's own Spend is Command overhead, Spend nobody's turns explain counts toward "other".
 _Avoid_: quota (that is the account's), limit (that is Claude's usage limit)
 
 **Spend**:
@@ -140,5 +148,5 @@ An Agent's own one-line status for the user, written at the end of every turn; "
 _Avoid_: summary, recap
 
 **Demo**:
-Where an Agent has a demo or preview of its work hosted, reported with `berthier demo <url> [label]` by each Main Agent and Division for itself; the Console's info panel lists it.
+Where an Agent has a demo or preview of its work hosted, reported with `berthier demo <url> [label]` by each Marshal and Division for itself; the Console's info panel lists it.
 _Avoid_: preview link, deployment

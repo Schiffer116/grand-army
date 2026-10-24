@@ -119,7 +119,7 @@ func TestCorpsRetireAndReopen(t *testing.T) {
 		t.Errorf("a message to a retired Corps was queued: %v", m)
 	}
 
-	// Reopen: a workspace in its dir with a Main Agent started on a rebuild prompt.
+	// Reopen: a workspace in its dir with a Marshal started on a rebuild prompt.
 	if _, errs, code := s.sh("", "corps-reopen", "nope"); code != 1 || !strings.Contains(errs, "not retired") {
 		t.Errorf("reopen of a Corps that is not retired: %d %q", code, errs)
 	}
@@ -137,9 +137,9 @@ func TestCorpsRetireAndReopen(t *testing.T) {
 		t.Errorf("still retired after a reopen (code %d, %q %q)", code, out, errs)
 	}
 	if starts := s.host.CallsTo("Start"); len(starts) != 1 {
-		t.Errorf("no Main Agent started: %q", errs)
+		t.Errorf("no Marshal started: %q", errs)
 	} else if took := s.sim.Took(starts[0].Args[0]); !strings.HasPrefix(took, "[berthier fresh] ") || !strings.Contains(took, "berthier notes") {
-		t.Errorf("Main Agent was told %q", took)
+		t.Errorf("Marshal was told %q", took)
 	}
 }
 

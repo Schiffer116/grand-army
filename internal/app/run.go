@@ -27,27 +27,27 @@ func die(format string, a ...any) error { return fmt.Errorf(format, a...) }
 
 const usageText = `usage: berthier <command> [args]
 
-corps-new <name> <dir> [brief]      create a Corps workspace with a Main Agent
-corps-retire <corps>                (the user's) stop a Corps's Main Agent and close its workspace, keeping its record, Notes and Board
+corps-new <name> <dir> [brief]      create a Corps workspace with a Marshal
+corps-retire <corps>                (the user's) stop a Corps's Marshal and close its workspace, keeping its record, Notes and Board
                                     card; refused with open Divisions, a dirty tree or unpushed commits. A retired Corps is left out
                                     of the Main Loop, Console, shutdown/wake and asks
-corps-reopen <corps>                (the user's) bring a retired Corps back: a workspace in its dir, a Main Agent rebuilding from
+corps-reopen <corps>                (the user's) bring a retired Corps back: a workspace in its dir, a Marshal rebuilding from
                                     Notes, Board and git
 adopt <workspace> <corps>           make an existing workspace a Division of a Corps
 board <corps> [--adopt <board-id>]  give a Corps its Board: an existing Skipli board, else a card on the Grand Army Board;
-                                    the Main Loop hands its Main Agent new tasks added there (corps-new does this itself)
+                                    the Main Loop hands its Marshal new tasks added there (corps-new does this itself)
 division-new <name> [--model <m>] [--artifact] <brief>|-
-                                    (Main Agent) spawn a Division: a worktree workspace with its own Agent
+                                    (Marshal) spawn a Division: a worktree workspace with its own General
                                     on --model (default $BERTHIER_DIVISION_MODEL, haiku); no Artifact unless --artifact;
                                     - reads the Brief from stdin; a blank Brief is refused
 land <division>                     (Berthier) merge a Division of Berthier into master, check, rebuild, restart
                                     the changed services and wait until they work; refuses on conflict or failure
-division-done <name>                (Main Agent) remove a spawned Division once the user reviewed it
+division-done <name>                (Marshal) remove a spawned Division once the user reviewed it
 report "<line>"                     (any Agent) one-line status for the user; "needs you: ..." when they must act
 demo <url> [label]                (any Agent) where this Agent's demo or preview is hosted, shown in the Console's info panel;
                                     --clear [url] drops one (or all), --list prints them
 ask <corps> "<request>"             (any Agent) request work from another Corps, delivered when it is idle
-notify <corps> "<text>"             (service, no pane needed) one-way message to a Corps's Main Agent, no reply expected
+notify <corps> "<text>"             (service, no pane needed) one-way message to a Corps's Marshal, no reply expected
 shutdown [text]                     (the user's, army-wide) tell every Agent with a live pane (Frozen skipped) to wrap up: park, commit+push WIP, report, update notes;
                                     first snapshots which Agents are working
 wake                                (the user's, army-wide) /clear only the Agents that were working at Shutdown (else, before the restart),
@@ -58,8 +58,9 @@ last <pane>                         the Claude Agent's latest assistant message,
 revive <pane>                       (the user's choice) resume a Frozen Agent's session anyway, rewriting its cache
 fresh <pane>                        (the user's choice) a Fresh Start for a Frozen Agent: a new session in its pane, same model,
                                     rebuilt from its Corps's Notes, Board, last report and git (a Division: also its Brief)
-session-start                       Claude Code SessionStart hook (JSON on stdin): Berthier's repo root gets BERTHIER.md and
-                                    the Berthier Notes; a Corps's Main Agent its Corps's Notes; anything else nothing; never fails
+session-start                       Claude Code SessionStart hook (JSON on stdin), by role: Berthier's repo root gets BERTHIER.md and
+                                    the Berthier Notes; a Corps's Marshal MARSHAL.md and its Corps's Notes; a General GENERAL.md;
+                                    anything else nothing; never fails
 notes [<corps>] [--set -]           a Corps's Notes (default: the caller's); --set - replaces them from stdin, refused if
                                     they changed since this Agent last read them (read again and merge)
 owners                              who owns what, to know whom to ask
@@ -71,7 +72,12 @@ profile [--waste] [--corps <c>] [--session <id>] [--week <n>]
                                     --waste: only the Waste signals, all of them; --session: that session's turns
 counts                              Agent count per status plus reports, as JSON for status bars
 log [-n lines] [-f]                 the Main Loop's event log, readable
-army                                the full Grand Army view model as JSON (Corps, Divisions, Agents, asks, log)
+army [<pane>]                       the full Grand Army view model as JSON (Corps, Divisions, Agents, asks, log); with a pane: that
+                                    Agent only (name, state, Corps, Division, cwd, process alive / at shell, session)
+check-in <pane> [--recent N]        what a pane shows now: its screen, or its last N lines (a dialog, a blocked question)
+keys <pane> interrupt|enter|clear-draft
+                                    press a named key in a pane: stop its turn, submit its box, empty its box
+rename <pane> <name>                name the Agent in a pane
 dashboard [server args]             serve the live Grand Army console on 127.0.0.1:8430
 hook <event>                        Claude Code hook (JSON on stdin): records the session's state for its pane in state/agents/
 hook-stop                           Claude Code Stop hook: a turn that ends unreported gets a report from its final message
@@ -157,6 +163,9 @@ func init() {
 		"wake":               cmdBroadcast("wake"),
 		"prompt":             cmdPrompt,
 		"last":               cmdLast,
+		"check-in":           cmdCheckIn,
+		"keys":               cmdKeys,
+		"rename":             cmdRename,
 		"revive":             cmdThaw("revive"),
 		"fresh":              cmdThaw("fresh"),
 		"notes":              cmdNotes,

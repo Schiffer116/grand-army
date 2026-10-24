@@ -10,28 +10,33 @@ import (
 	"berthier/internal/core"
 )
 
-// cmdSessionStart is a Claude Code SessionStart hook (JSON on stdin). Berthier's
-// repo root gets BERTHIER.md and the Berthier Notes; any other Agent in a Corps's
-// workspace its Corps's Notes; a Division or anything outside the Army nothing.
-// Never fails the session: it prints what it has within BERTHIER_SESSION_START_WAIT.
+// cmdSessionStart is a Claude Code SessionStart hook (JSON on stdin). It prints
+// the session's role: Berthier (the repo root) gets BERTHIER.md and the
+// Berthier Notes; a Corps's Marshal MARSHAL.md and its Corps's Notes; a General
+// (the Agent of a Division) GENERAL.md; any other session, outside the Army,
+// nothing. Never fails the session: it prints what it has within
+// BERTHIER_SESSION_START_WAIT.
 func cmdSessionStart(e *Env, args []string, io IO) error {
 	payload, _ := stdioReadAll(io.In)
 	in, _ := e.harness().Hook("SessionStart", payload)
-	persona := sameDir(in.Cwd, e.Root)
-	corps := "berthier"
-	if !persona {
-		corps = e.sessionCorps()
+	role, corps := "", "berthier"
+	if sameDir(in.Cwd, e.Root) {
+		role = "berthier"
+	} else {
+		role, corps = e.sessionRole()
 	}
-	if corps == "" {
+	if role == "" {
 		return nil
 	}
 	var b strings.Builder
-	if persona {
-		if raw, err := os.ReadFile(filepath.Join(e.Root, "BERTHIER.md")); err == nil {
-			b.WriteString(strings.TrimRight(string(raw), "\n") + "\n\n")
-		}
+	if raw, err := os.ReadFile(filepath.Join(e.Root, strings.ToUpper(role)+".md")); err == nil {
+		b.WriteString(strings.TrimRight(string(raw), "\n") + "\n\n")
 	}
-	// The Notes read is a skipli call: bounded, and the persona goes out regardless.
+	if role == "general" {
+		fmt.Fprint(io.Out, b.String())
+		return nil
+	}
+	// The Notes read is a skipli call: bounded, and the instructions go out regardless.
 	got := make(chan string, 1)
 	go func() { got <- e.notesForSession(corps, in.Session) }()
 	select {
@@ -45,21 +50,21 @@ func cmdSessionStart(e *Env, args []string, io IO) error {
 	return nil
 }
 
-// sessionCorps is the Corps whose Main Agent runs in this pane's workspace, or ""
-// for a Division or no workspace of the Army.
-func (e *Env) sessionCorps() string {
+// sessionRole is the role of the Agent running in this pane's workspace:
+// "marshal" of a Corps, "general" of a Division, or "" outside the Army.
+func (e *Env) sessionRole() (role, corps string) {
 	id := e.selfWorkspace()
 	if id == "" {
-		return ""
+		return "", ""
 	}
 	ws, err := e.Host.Workspace(id)
 	if err != nil || ws.Label == "" {
-		return ""
+		return "", ""
 	}
 	if e.ReadDivisions().IsDivision(ws.Label) {
-		return ""
+		return "general", ""
 	}
-	return core.CorpsName(ws.Label)
+	return "marshal", core.CorpsName(ws.Label)
 }
 
 // notesForSession reads a Corps's Notes for the session, as `berthier notes`

@@ -169,7 +169,7 @@ func (e *Env) EnsureBoard(label, adopt string) (string, error) {
 
 // pollBoards runs from the Main Loop's tick, at most every BoardPoll seconds:
 // a new task in a Corps's card, or a new card or task on its own Board, goes
-// to the inbox for its Main Agent (delivered like an ask: when idle, held
+// to the inbox for its Marshal (delivered like an ask: when idle, held
 // while it works or its Corps is over budget). The first poll of a Board only
 // seeds. Trouble (no Session, a Board that cannot be read, a card too big) is
 // escalated to Berthier once, until it clears.
@@ -272,7 +272,7 @@ func cardIn(doc core.BoardDoc, id string) (core.BoardCard, bool) {
 	return core.BoardCard{}, false
 }
 
-// queueBoardNews drops a one-way "board" message for a Corps's Main Agent in the inbox.
+// queueBoardNews drops a one-way "board" message for a Corps's Marshal in the inbox.
 func (e *Env) queueBoardNews(n core.BoardNew, board string, now int64) {
 	b, _ := json.Marshal(struct {
 		Kind string `json:"kind"`

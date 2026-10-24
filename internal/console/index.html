@@ -572,7 +572,7 @@ function renderHeader(all) {
 
 // Quota usage: the account's 5h and 7d windows and every Corps's share of the
 // week. With a budget the bar is the share of the allowance (the tick marks
-// where its Main Agent is told); without, the share of the week.
+// where its Marshal is told); without, the share of the week.
 function renderBudget() {
   if (ui.budgetDrag) return; // a bar being dragged must not be rebuilt under the finger
   const b = army.budget, el = $('usage'), focus = document.activeElement?.closest?.('.hit')?.dataset?.budget;
@@ -831,7 +831,7 @@ function renderChatHead(a, all) {
     ? `${corps ? `<button type="button" class="link" data-pane="${esc(corps.pane_id)}">${esc(a.parent)}</button>` : esc(a.parent)}<span class="sl" aria-hidden="true">/</span>${esc(a.unit.name)}`
     : esc(a.unit.name);
   const demo = demosOf(a, all).find((d) => d.from == null);
-  const role = a.role === 'division' ? '' : a.unit.name === 'berthier' ? 'chief of staff' : 'main agent';
+  const role = a.role === 'division' ? '' : a.unit.name === 'berthier' ? 'chief of staff' : 'marshal';
   el.innerHTML = `<button type="button" class="btn back" id="back-btn" aria-label="back to agents">←</button>
     <span class="who"><span style="color: ${a.needs_you ? C.accent : a.color}" aria-hidden="true">${a.needs_you ? '●' : a.glyph}</span>
       <nav class="crumb" aria-label="corps and division">${crumb}</nav>${role ? `<span class="dim">${role}</span>` : ''}
@@ -1473,7 +1473,7 @@ function renderTable() {
     if (!o) continue;
     for (const v of c.divisions) {
       const key = c.name + '/' + v.name, od = prof.openDiv.has(key);
-      h += `<button type="button" class="prow pd" data-d="${esc(key)}" aria-expanded="${od}"><span class="clip nm"><span class="caret">${od ? '▾' : '▸'}</span>${v.name ? esc(v.name) : '<span class="muted">main agent</span>'}</span>${cells(v)}</button>`;
+      h += `<button type="button" class="prow pd" data-d="${esc(key)}" aria-expanded="${od}"><span class="clip nm"><span class="caret">${od ? '▾' : '▸'}</span>${v.name ? esc(v.name) : '<span class="muted">marshal</span>'}</span>${cells(v)}</button>`;
       if (!od) continue;
       for (const s of v.sessions) {
         h += `<button type="button" class="prow ps" data-s="${esc(s.id)}" aria-pressed="${s.id === prof.session}"><span class="clip nm" title="${esc(s.prompt)}"><span class="o-${esc(s.origin)}">${esc(s.prompt || s.id.slice(0, 8))}</span></span>

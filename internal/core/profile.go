@@ -80,7 +80,7 @@ func (s *Totals) add(t Turn) {
 }
 
 // Landed is Delivered work: a commit on a Corps's main branch (a merge counts
-// the commits it brought), credited to its Main Agent (Division "") or to the
+// the commits it brought), credited to its Marshal (Division "") or to the
 // Division that delivered it (Credit), and whether it finished that work.
 type Landed struct {
 	Corps    string  `json:"corps"`
@@ -114,7 +114,7 @@ var (
 // request ("(#28)", "Merge pull request #28") a Division created, a commit
 // whatever way it landed (fast-forward, rebase keeping its sha) a Division
 // made, a merged branch a Division worked. Merged branches and pull requests
-// finish that work. The rest is the Main Agent's (Landed.Main).
+// finish that work. The rest is the Marshal's (Landed.Main).
 func Credit(landed []Landed, turns []Turn) []Landed {
 	pr, sha, branch := map[string]string{}, map[string]string{}, map[string]string{}
 	for _, t := range turns {
@@ -175,12 +175,12 @@ type Line struct {
 	Models   map[string]Totals  `json:"models"`
 	Origins  map[string]float64 `json:"origins"`
 	Waste    float64            `json:"waste_usd"`
-	// A Corps lists its Divisions (Name "" is its Main Agent); a Division its sessions.
+	// A Corps lists its Divisions (Name "" is its Marshal); a Division its sessions.
 	Divisions []Line        `json:"divisions,omitempty"`
 	Sessions  []SessionLine `json:"sessions,omitempty"`
 }
 
-// SessionLine is one session of a Division or Main Agent.
+// SessionLine is one session of a Division or Marshal.
 type SessionLine struct {
 	ID     string  `json:"id"`
 	Parent string  `json:"parent,omitempty"`
