@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"maps"
 	"math"
 	"slices"
@@ -212,12 +213,8 @@ func (u Usage) View(budgets map[string]float64, now int64) UsageView {
 		}
 		v.Corps = append(v.Corps, c)
 	}
-	sort.SliceStable(v.Corps, func(i, j int) bool {
-		a, b := v.Corps[i], v.Corps[j]
-		if a.Used != b.Used {
-			return a.Used > b.Used
-		}
-		return a.Name < b.Name
+	slices.SortStableFunc(v.Corps, func(a, b CorpsUse) int {
+		return cmp.Or(cmp.Compare(b.Used, a.Used), cmp.Compare(a.Name, b.Name))
 	})
 	return v
 }

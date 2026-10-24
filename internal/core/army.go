@@ -2,10 +2,11 @@ package core
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -298,7 +299,7 @@ func Army(in ArmyIn) ArmyView {
 		return 1 << 30
 	}
 	sortDivs := func(d []DivisionView) []DivisionView {
-		sort.SliceStable(d, func(i, j int) bool { return posOf(d[i].WorkspaceID) < posOf(d[j].WorkspaceID) })
+		slices.SortStableFunc(d, func(a, b DivisionView) int { return cmp.Compare(posOf(a.WorkspaceID), posOf(b.WorkspaceID)) })
 		return d
 	}
 	corps := []CorpsView{}
@@ -320,7 +321,7 @@ func Army(in ArmyIn) ArmyView {
 		}
 		units = append(units, UnitView{"berthier", "berthier", ws, []AgentView{v}, bdivs})
 	}
-	sort.SliceStable(units, func(i, j int) bool { return posOf(units[i].WorkspaceID) < posOf(units[j].WorkspaceID) })
+	slices.SortStableFunc(units, func(a, b UnitView) int { return cmp.Compare(posOf(a.WorkspaceID), posOf(b.WorkspaceID)) })
 
 	var all []AgentView
 	for _, c := range corps {
@@ -341,12 +342,8 @@ func Army(in ArmyIn) ArmyView {
 			needs = append(needs, a)
 		}
 	}
-	sort.SliceStable(needs, func(i, j int) bool {
-		si, sj := orI(needs[i].StatusSince, 0), orI(needs[j].StatusSince, 0)
-		if si != sj {
-			return si < sj
-		}
-		return needs[i].Who < needs[j].Who
+	slices.SortStableFunc(needs, func(a, b AgentView) int {
+		return cmp.Or(cmp.Compare(orI(a.StatusSince, 0), orI(b.StatusSince, 0)), cmp.Compare(a.Who, b.Who))
 	})
 
 	var counts Counts
@@ -414,9 +411,9 @@ func Army(in ArmyIn) ArmyView {
 	reverse(activity)
 
 	asks := append([]Ask{}, in.Inbox...)
-	sort.SliceStable(asks, func(i, j int) bool { return asks[i].At < asks[j].At })
+	slices.SortStableFunc(asks, func(a, b Ask) int { return cmp.Compare(a.At, b.At) })
 	askLog := append([]AskLogEntry{}, st.AskLog...)
-	sort.SliceStable(askLog, func(i, j int) bool { return askLog[i].At < askLog[j].At })
+	slices.SortStableFunc(askLog, func(a, b AskLogEntry) int { return cmp.Compare(a.At, b.At) })
 	reverse(askLog)
 
 	var updated *int64

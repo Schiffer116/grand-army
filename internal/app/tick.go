@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -218,11 +218,8 @@ func (e *Env) escalate(out core.TickOut) {
 	for k := range groups {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].to != keys[j].to {
-			return keys[i].to < keys[j].to
-		}
-		return keys[i].head < keys[j].head
+	slices.SortFunc(keys, func(a, b key) int {
+		return cmp.Or(cmp.Compare(a.to, b.to), cmp.Compare(a.head, b.head))
 	})
 	berthier := ""
 	if out.State.Berthier != nil {

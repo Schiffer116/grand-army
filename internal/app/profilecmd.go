@@ -2,9 +2,11 @@ package app
 
 import (
 	"bytes"
+	"cmp"
+	"maps"
 	"os/exec"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -125,8 +127,8 @@ func mainBranches(turns []core.Turn) map[string][]string {
 	}
 	out := map[string][]string{}
 	for c, m := range counts {
-		l := sortedKeys(m)
-		sort.SliceStable(l, func(i, j int) bool { return m[l[i]] > m[l[j]] })
+		l := slices.Sorted(maps.Keys(m))
+		slices.SortStableFunc(l, func(a, b string) int { return cmp.Compare(m[b], m[a]) })
 		out[c] = l
 	}
 	return out

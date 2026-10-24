@@ -1,10 +1,11 @@
 package core
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 )
@@ -269,7 +270,7 @@ func Tick(in TickIn) TickOut {
 
 	// Herdr's own workspace order, which every view of the Grand Army follows.
 	workspaces := append([]Workspace(nil), in.Snap.Workspaces...)
-	sort.SliceStable(workspaces, func(i, j int) bool { return workspaces[i].Number < workspaces[j].Number })
+	slices.SortStableFunc(workspaces, func(a, b Workspace) int { return cmp.Compare(a.Number, b.Number) })
 	ws := map[string]Workspace{}
 	for _, w := range workspaces {
 		ws[w.ID] = w
@@ -523,7 +524,7 @@ func Tick(in TickIn) TickOut {
 	fresh := []FreshStart{}
 	var thawResume []Resume
 	thaws := append([]Thaw(nil), in.Thaw...)
-	sort.SliceStable(thaws, func(i, j int) bool { return thaws[i].At < thaws[j].At })
+	slices.SortStableFunc(thaws, func(a, b Thaw) int { return cmp.Compare(a.At, b.At) })
 	for _, t := range thaws {
 		a := agents.Get(t.Pane)
 		if a == nil || a.Frozen == nil || slices.Contains(unfreeze, t.Pane) {
@@ -687,7 +688,7 @@ func Tick(in TickIn) TickOut {
 		present
 	}
 	var backs, cutAgents, goAgents []back
-	for _, sid := range sortedSids(waiting) {
+	for _, sid := range slices.Sorted(maps.Keys(waiting)) {
 		b, ok := bySession[sid]
 		// Herdr first lists a resumed pane with its stale status, then
 		// relaunches Claude: wait for the status to hold.
@@ -875,12 +876,7 @@ func Tick(in TickIn) TickOut {
 	}
 	mainNamed := map[string]string{}
 	{
-		labels := make([]string, 0, len(mainOf))
-		for l := range mainOf {
-			labels = append(labels, l)
-		}
-		slices.Sort(labels)
-		for _, l := range labels {
+		for _, l := range slices.Sorted(maps.Keys(mainOf)) {
 			mainNamed[CorpsName(l)] = mainOf[l]
 		}
 	}
@@ -945,7 +941,7 @@ func Tick(in TickIn) TickOut {
 		}
 	}
 	inbox := append([]Ask(nil), in.Inbox...)
-	sort.SliceStable(inbox, func(i, j int) bool { return inbox[i].At < inbox[j].At })
+	slices.SortStableFunc(inbox, func(a, b Ask) int { return cmp.Compare(a.At, b.At) })
 	deliver := []Delivery{}
 	used := map[string]bool{}
 	delivered := map[string]bool{}
@@ -1051,15 +1047,10 @@ func Tick(in TickIn) TickOut {
 		for p := range groups {
 			pairs = append(pairs, p)
 		}
-		sort.Slice(pairs, func(i, j int) bool {
-			if pairs[i][0] != pairs[j][0] {
-				return pairs[i][0] < pairs[j][0]
-			}
-			return pairs[i][1] < pairs[j][1]
-		})
+		slices.SortFunc(pairs, func(a, b [2]string) int { return slices.Compare(a[:], b[:]) })
 		for _, p := range pairs {
 			l := groups[p]
-			sort.SliceStable(l, func(i, j int) bool { return l[i].At < l[j].At })
+			slices.SortStableFunc(l, func(a, b entry) int { return cmp.Compare(a.At, b.At) })
 			flips := 0
 			for i := 1; i < len(l); i++ {
 				if l[i].From != l[i-1].From {
@@ -1292,12 +1283,7 @@ func Tick(in TickIn) TickOut {
 			agents.M[k].DraftAt = ptr(now)
 		}
 	}
-	drafts := make([]string, 0, len(draftLook))
-	for p := range draftLook {
-		drafts = append(drafts, p)
-	}
-	slices.Sort(drafts)
-	for _, p := range drafts {
+	for _, p := range slices.Sorted(maps.Keys(draftLook)) {
 		look = append(look, Look{p, nil, []string{"draft"}})
 	}
 	for _, e := range limitRead {
@@ -1375,13 +1361,4 @@ func orDefault(v, d int64) int64 {
 		return d
 	}
 	return v
-}
-
-func sortedSids(m map[string]Interrupt) []string {
-	l := make([]string, 0, len(m))
-	for k := range m {
-		l = append(l, k)
-	}
-	slices.Sort(l)
-	return l
 }
