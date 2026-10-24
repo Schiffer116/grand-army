@@ -2,7 +2,7 @@
 .PHONY: help build test e2e lint fmt check hooks restart status log clean
 
 help: ## List targets
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-8s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-8s %s\n", $$1, $$2}'
 
 build: ## Build bin/berthier
 	go build -o bin/berthier ./cmd/berthier
@@ -31,7 +31,7 @@ restart: ## Restart the loop and Console services
 status: ## Show the loop and Console services
 	systemctl --user status berthier-loop berthier-dashboard --no-pager
 
-log: ## Follow the loop log
+log: build ## Follow the loop log
 	bin/berthier log -f
 
 clean: ## Remove built binaries
