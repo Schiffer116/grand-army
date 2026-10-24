@@ -22,6 +22,7 @@ type Env struct {
 	NotesStore                                   string
 	NotesMax                                     int
 	CacheWarm, FrozenMin, FreshEst, NotesLead    int64
+	SessionWait                                  time.Duration
 	SkipliBin, SkipliEnv                         string
 	BoardPoll, BoardFailAfter                    int64
 	H                                            herdr.Client
@@ -147,6 +148,8 @@ func LoadEnv(getenv func(string) string) Env {
 	// in bytes (Skipli takes a change of up to 128KiB; Notes are read by every new session).
 	e.NotesStore = str("BERTHIER_NOTES_STORE", "skipli")
 	e.NotesMax = int(i64("BERTHIER_NOTES_MAX", 32768))
+	// How long session-start may take to read the Notes before it prints without them (seconds).
+	e.SessionWait = time.Duration(num("BERTHIER_SESSION_START_WAIT", 5) * float64(time.Second))
 	// A Revive or usage-limit resume goes ahead by itself only if the session's last API call was
 	// under CACHE_WARM seconds ago (Claude Code's cache TTL is an hour) or its context is under
 	// FROZEN_MIN tokens; otherwise the Agent is Frozen until the user chooses.

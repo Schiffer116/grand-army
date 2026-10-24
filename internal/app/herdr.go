@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"berthier/internal/core"
@@ -31,10 +30,10 @@ func (e *Env) Snapshot() (core.Snapshot, error) {
 }
 
 // claudeFlags are the flags Claude starts with after `--` in the workspace
-// labelled label: its model, and what its role allows. Only Berthier's own
-// launches load BERTHIER.md, so Divisions never think they are Berthier. A
-// Division's Agent may not use Artifact unless division-new --artifact. A
-// Main Agent (not a Division) with no recorded model runs on CorpsModel.
+// labelled label: its model, and what its role allows. A Division's Agent may
+// not use Artifact unless division-new --artifact. A Main Agent (not a
+// Division) with no recorded model runs on CorpsModel. Berthier's persona comes
+// from the SessionStart hook (`berthier session-start`), not from a flag.
 func (e *Env) claudeFlags(label, model string) []string {
 	var f []string
 	_, isDivision := e.ReadDivisions()[core.CorpsName(label)]
@@ -45,9 +44,6 @@ func (e *Env) claudeFlags(label, model string) []string {
 		f = append(f, "--model", model)
 	}
 	name := core.CorpsName(label)
-	if name == "berthier" {
-		f = append(f, "--append-system-prompt-file", filepath.Join(e.Root, "BERTHIER.md"))
-	}
 	if d, ok := e.ReadDivisions()[name]; ok && !d.Artifact {
 		f = append(f, "--disallowedTools", "Artifact")
 	}

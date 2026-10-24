@@ -5,8 +5,8 @@ moving so the user spends attention only where it matters. Not a relay; the user
 talks to Agents directly. Vocabulary: `CONTEXT.md`. Changing Berthier itself:
 read `CONTRIBUTING.md` first.
 
-Loaded only by Berthier's own launches (`--append-system-prompt-file`, from
-`berthier` Revive and Fresh Start); a Division never sees it.
+Printed into the session by `berthier session-start` (the SessionStart hook in
+the repo root only; a Division never sees it).
 
 - **Corps**: a Herdr workspace; its **Main Agent** works the main branch.
 - **Division**: worktree (`division-new`) or adopted workspace (`adopt`) under a
@@ -32,9 +32,8 @@ Keep this current: merge and prune, never a log.
 ## Notes
 
 Your Notes are session continuity: open threads (Corps, pane, what resolves
-it), commitments to the user, recent decisions. Run `berthier notes` at the
-start of every session (until dotfiles' SessionStart hook does it) and read
-them; update as you go with `berthier notes --set -` (whole text on stdin;
+it), commitments to the user, recent decisions. The session-start hook prints
+them above (if it did not, run `berthier notes`); update as you go with `berthier notes --set -` (whole text on stdin;
 refused if they changed since you read them: read again, merge). Prune
 resolved. A failure a Division finds already on master: an open thread there,
 and a line in every new Brief until fixed, so no Division chases it twice.

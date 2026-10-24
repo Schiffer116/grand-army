@@ -1,5 +1,5 @@
 # The repository is Berthier's home; the root CLAUDE.md is its identity
 
-> Amended: Divisions read `CLAUDE.md` too, and thought they were Berthier. The persona moved to `BERTHIER.md`, loaded only by Berthier's own launches (`--append-system-prompt-file`); `CLAUDE.md` is now a pointer. Notes moved to Skipli (`berthier notes`), so `notes.md` is gone.
+> Amended: Divisions read `CLAUDE.md` too, and thought they were Berthier. The persona moved to `BERTHIER.md`, printed by `berthier session-start` (a SessionStart hook) only in the repo root; `CLAUDE.md` is now a pointer. Notes moved to Skipli (`berthier notes`), so `notes.md` is gone.
 
 Any agent launched in this repository is Berthier: the root `CLAUDE.md` is Berthier's instructions, not developer docs (those live in `CONTRIBUTING.md`), and runtime data (`state/`, `notes.md` for session continuity) sits gitignored beside it, while Berthier keeps its picture of how the user works in `CLAUDE.md` itself. We first ran Berthier as a separate agent in `~/.berthier` started by a `berthier up` command, but that added a launcher, split Berthier from its own code, and made the user's natural move - open `claude` here - produce a developer instead of Berthier. The Main Loop therefore recognises Berthier by working directory, not by an agent name.

@@ -137,12 +137,11 @@ esac
 	}
 }
 
-// Claude's launch flags by workspace: Berthier loads its persona, a Division
-// may not use Artifact unless it was spawned with --artifact.
+// Claude's launch flags by workspace: a Division may not use Artifact unless
+// it was spawned with --artifact.
 func TestClaudeFlags(t *testing.T) {
 	s := newSandbox(t)
 	e := LoadEnv(s.getenv)
-	e.Root = "/repo"
 	e.SetDivision("feat", &core.Division{Corps: "corps", Worktree: true, Model: "haiku"})
 	e.SetDivision("art", &core.Division{Corps: "corps", Worktree: true, Artifact: true})
 	e.SetDivision("adopted", &core.Division{Corps: "corps"})
@@ -150,7 +149,7 @@ func TestClaudeFlags(t *testing.T) {
 		{"corps", "", "--model opus"},
 		{"corps", "sonnet", "--model sonnet"},
 		{"corps", "opus", "--model opus"},
-		{"berthier", "", "--model opus --append-system-prompt-file /repo/BERTHIER.md"},
+		{"berthier", "", "--model opus"},
 		{"feat", "haiku", "--model haiku --disallowedTools Artifact"},
 		{"art", "haiku", "--model haiku"},
 		{"adopted", "", "--disallowedTools Artifact"},

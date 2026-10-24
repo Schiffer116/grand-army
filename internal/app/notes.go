@@ -111,13 +111,16 @@ func notesHash(s string) string {
 }
 
 // noteRead remembers which version of a Corps's Notes the reader last saw.
-func (e *Env) noteRead(corps, text string) error {
+func (e *Env) noteRead(corps, text string) error { return e.noteReadBy(e.notesReader(), corps, text) }
+
+// noteReadBy is noteRead for an explicit reader (a session-start hook knows its session only from its input).
+func (e *Env) noteReadBy(reader, corps, text string) error {
 	m := map[string]map[string]string{}
 	readJSON(e.NotesRead, &m)
 	if m[corps] == nil {
 		m[corps] = map[string]string{}
 	}
-	m[corps][e.notesReader()] = notesHash(text)
+	m[corps][reader] = notesHash(text)
 	return writeJSONAtomic(e.NotesRead, m, true)
 }
 

@@ -51,6 +51,8 @@ last <pane>                         the Claude Agent's latest assistant message,
 revive <pane>                       (the user's choice) resume a Frozen Agent's session anyway, rewriting its cache
 fresh <pane>                        (the user's choice) a Fresh Start for a Frozen Agent: a new session in its pane, same model,
                                     rebuilt from its Corps's Notes, Board, last report and git (a Division: also its Brief)
+session-start                       Claude Code SessionStart hook (JSON on stdin): Berthier's repo root gets BERTHIER.md and
+                                    the Berthier Notes; a Corps's Main Agent its Corps's Notes; anything else nothing; never fails
 notes [<corps>] [--set -]           a Corps's Notes (default: the caller's); --set - replaces them from stdin, refused if
                                     they changed since this Agent last read them (read again and merge)
 owners                              who owns what, to know whom to ask
@@ -139,6 +141,7 @@ func init() {
 		"revive":             cmdThaw("revive"),
 		"fresh":              cmdThaw("fresh"),
 		"notes":              cmdNotes,
+		"session-start":      cmdSessionStart,
 		"owners":             cmdOwners,
 		"counts":             cmdCounts,
 		"budget":             cmdBudget,
