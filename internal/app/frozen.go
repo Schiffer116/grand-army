@@ -1,11 +1,13 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -93,7 +95,7 @@ func cmdThaw(how string) command {
 		said := false
 		for _, l := range linesSince(e.Log, mark) {
 			var ev struct{ Kind, Pane, Msg string }
-			if json.Unmarshal([]byte(l), &ev) == nil && ev.Pane == pane && strsHas(thawOutcomes, ev.Kind) {
+			if json.Unmarshal([]byte(l), &ev) == nil && ev.Pane == pane && slices.Contains(thawOutcomes, ev.Kind) {
 				fmt.Fprintln(io.Out, ev.Msg)
 				said = true
 			}
@@ -151,11 +153,11 @@ func (e *Env) freshStart(f core.FreshStart) {
 	var warn string
 	switch e.startClaude(f.Name, f.PaneID, core.FreshPrompt(report, brief), f.Label, model, func(s string) { warn = s }) {
 	case "ready":
-		e.Event("fresh_started", fmt.Sprintf("Fresh Start: %s in %s, a new session on %s", f.Name, f.PaneID, orStr(model, "claude's default model")), f.Ev)
+		e.Event("fresh_started", fmt.Sprintf("Fresh Start: %s in %s, a new session on %s", f.Name, f.PaneID, cmp.Or(model, "claude's default model")), f.Ev)
 	case "blocked":
 		e.Event("fresh_started", fmt.Sprintf("Fresh Start: %s in %s waits on a startup dialog; its prompt follows once the user answers", f.Name, f.PaneID), f.Ev)
 	default:
-		fail(orStr(warn, "Claude did not start"))
+		fail(cmp.Or(warn, "Claude did not start"))
 	}
 }
 

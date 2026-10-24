@@ -2,7 +2,7 @@ package core
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // BoardDoc is a Skipli board as `skipli-cli board <id> --json` reads it.
@@ -78,7 +78,7 @@ func BoardNews(doc BoardDoc, corps, card string, seen []string) ([]BoardNew, []s
 	if keep == nil {
 		keep = []string{}
 	}
-	sort.Strings(keep)
+	slices.Sort(keep)
 	return news, keep
 }
 

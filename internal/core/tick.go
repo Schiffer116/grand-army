@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -244,15 +245,6 @@ func eqStr(a, b *string) bool {
 	return *a == *b
 }
 
-func inStrs(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 func nilIfEmpty(s string) *string {
 	if s == "" {
 		return nil
@@ -425,7 +417,7 @@ func Tick(in TickIn) TickOut {
 	}
 	var freezing []freeze
 	for _, k := range due {
-		if o := obs(k); o.Exited != nil && !*o.Exited && o.AtShell != nil && o.Cache != nil && !inStrs(exited, k) {
+		if o := obs(k); o.Exited != nil && !*o.Exited && o.AtShell != nil && o.Cache != nil && !slices.Contains(exited, k) {
 			if o.Cache.Warm(now, cfg) {
 				reviving = append(reviving, k)
 			} else {
@@ -435,7 +427,7 @@ func Tick(in TickIn) TickOut {
 	}
 	remaining := Agents{}
 	for _, k := range gone.Keys {
-		if !inStrs(exited, k) {
+		if !slices.Contains(exited, k) {
 			remaining.Set(k, gone.M[k])
 		}
 	}
@@ -534,7 +526,7 @@ func Tick(in TickIn) TickOut {
 	sort.SliceStable(thaws, func(i, j int) bool { return thaws[i].At < thaws[j].At })
 	for _, t := range thaws {
 		a := agents.Get(t.Pane)
-		if a == nil || a.Frozen == nil || inStrs(unfreeze, t.Pane) {
+		if a == nil || a.Frozen == nil || slices.Contains(unfreeze, t.Pane) {
 			thawed = append(thawed, t.ID)
 			continue
 		}
@@ -759,11 +751,11 @@ func Tick(in TickIn) TickOut {
 	for _, k := range exitCheck {
 		if o := obs(k); o.Exited == nil {
 			want := []string{"exited", "no_transcript"}
-			if inStrs(due, k) {
+			if slices.Contains(due, k) {
 				want = append(want, "at_shell", "cache")
 			}
 			look = append(look, Look{k, prevAgents.M[k].SessionID, want})
-		} else if inStrs(due, k) && o.Cache == nil {
+		} else if slices.Contains(due, k) && o.Cache == nil {
 			look = append(look, Look{k, prevAgents.M[k].SessionID, []string{"cache"}})
 		}
 	}
@@ -806,7 +798,7 @@ func Tick(in TickIn) TickOut {
 	autoPending := map[string]bool{}
 	for _, k := range agents.Keys {
 		f, a := frozen[k], agents.M[k]
-		if f == nil || f.Auto != "" || inStrs(unfreeze, k) || k == strOr(berthier, "") || !div.IsDivision(strOr(a.WorkspaceLabel, "")) {
+		if f == nil || f.Auto != "" || slices.Contains(unfreeze, k) || k == strOr(berthier, "") || !div.IsDivision(strOr(a.WorkspaceLabel, "")) {
 			continue
 		}
 		o := obs(k).Auto
@@ -837,7 +829,7 @@ func Tick(in TickIn) TickOut {
 	for _, k := range exited {
 		f := with(about(k), "session", prevAgents.M[k].SessionID)
 		why := "user exited it"
-		if inStrs(unsaved, k) {
+		if slices.Contains(unsaved, k) {
 			why = "its session has no transcript to resume"
 		}
 		decided = append(decided, Event{"forgot", fmt.Sprintf("forgot %s in %s: %s (session %s)", f["name"], k, why, strOr(prevAgents.M[k].SessionID, "null")), f})
@@ -887,7 +879,7 @@ func Tick(in TickIn) TickOut {
 		for l := range mainOf {
 			labels = append(labels, l)
 		}
-		sort.Strings(labels)
+		slices.Sort(labels)
 		for _, l := range labels {
 			mainNamed[CorpsName(l)] = mainOf[l]
 		}
@@ -1092,7 +1084,7 @@ func Tick(in TickIn) TickOut {
 	// alone chooses. Several frozen at once (a usage limit reset) go as one prompt.
 	for _, pane := range agents.Keys {
 		f := frozen[pane]
-		if f == nil || inStrs(unfreeze, pane) || autoPending[pane] {
+		if f == nil || slices.Contains(unfreeze, pane) || autoPending[pane] {
 			continue
 		}
 		v := agents.M[pane]
@@ -1168,7 +1160,7 @@ func Tick(in TickIn) TickOut {
 		since := v.StatusSince
 		switch {
 		case frozen[pane] != nil:
-			if inStrs(unfreeze, pane) || autoPending[pane] {
+			if slices.Contains(unfreeze, pane) || autoPending[pane] {
 				continue
 			}
 			why, text, since = "frozen", where+" is frozen: Revive or Fresh Start?", frozen[pane].Since
@@ -1304,7 +1296,7 @@ func Tick(in TickIn) TickOut {
 	for p := range draftLook {
 		drafts = append(drafts, p)
 	}
-	sort.Strings(drafts)
+	slices.Sort(drafts)
 	for _, p := range drafts {
 		look = append(look, Look{p, nil, []string{"draft"}})
 	}
@@ -1368,7 +1360,7 @@ func orI(p *int64, d int64) int64 {
 }
 
 func uniq(l []string) []string {
-	sort.Strings(l)
+	slices.Sort(l)
 	out := l[:0]
 	for i, s := range l {
 		if i == 0 || s != l[i-1] {
@@ -1390,6 +1382,6 @@ func sortedSids(m map[string]Interrupt) []string {
 	for k := range m {
 		l = append(l, k)
 	}
-	sort.Strings(l)
+	slices.Sort(l)
 	return l
 }

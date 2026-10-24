@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -201,7 +201,7 @@ func (e *Env) pollBoards(out core.TickOut) {
 		}
 		byBoard[r.Board] = append(byBoard[r.Board], corps)
 	}
-	sort.Strings(boards)
+	slices.Sort(boards)
 	for _, id := range boards {
 		doc, err := e.skipliBoard(id)
 		if sessionProblem(err) {
@@ -225,7 +225,7 @@ func (e *Env) pollBoards(out core.TickOut) {
 		delete(s.Alerts, "session")
 		delete(s.Alerts, "error:"+id)
 		corpsOf := byBoard[id]
-		sort.Strings(corpsOf)
+		slices.Sort(corpsOf)
 		keep := s.Seen[id]
 		for _, corps := range corpsOf {
 			r := s.Corps[corps]

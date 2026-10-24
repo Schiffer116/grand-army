@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -44,7 +44,7 @@ func eventLine(ts int64, kind, msg string, fields core.Fields) []byte {
 			keys = append(keys, k)
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, k := range keys {
 		fmt.Fprintf(&b, `,%s:%s`, enc(k), enc(fields[k]))
 	}
@@ -175,7 +175,7 @@ func (e *Env) ReadDemos() map[string][]core.Demo {
 
 func jsonFiles(dir string) []string {
 	m, _ := filepath.Glob(filepath.Join(dir, "*.json"))
-	sort.Strings(m)
+	slices.Sort(m)
 	return m
 }
 

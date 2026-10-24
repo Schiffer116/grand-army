@@ -3,7 +3,7 @@ package core
 import (
 	"encoding/json"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -124,11 +124,11 @@ func tick(prev State, s Snapshot, now int64, o opt) TickOut {
 		more := false
 		// ... and every transcript a resume waits on: warm unless the test's obs says otherwise.
 		for _, l := range out.Look {
-			if v := obs[l.PaneID]; inStrs(l.Want, "draft") && v.Draft == nil {
+			if v := obs[l.PaneID]; slices.Contains(l.Want, "draft") && v.Draft == nil {
 				v.Draft, more = yes(false), true
 				obs[l.PaneID] = v
 			}
-			if v := obs[l.PaneID]; inStrs(l.Want, "auto_fresh") && v.Auto == nil {
+			if v := obs[l.PaneID]; slices.Contains(l.Want, "auto_fresh") && v.Auto == nil {
 				v.Auto, more = &AutoCheck{}, true // no Brief kept unless the test says otherwise
 				obs[l.PaneID] = v
 			}
@@ -651,7 +651,7 @@ func TestBudgets(t *testing.T) {
 	check(t, "asks delivered under budget", ids(tick(prev, sb, 1010, opt{usage: used(1, 0), budgets: budgets, inbox: inbox})), `["1","2","3"]`)
 }
 
-func sortStrings(l []string) { sort.Strings(l) }
+func sortStrings(l []string) { slices.Sort(l) }
 
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
@@ -860,7 +860,7 @@ func TestFrozenRouting(t *testing.T) {
 	fb.Agents.M["w1:p1"].Frozen = &Frozen{Since: 1000, Why: "limit", Cache: cold}
 	o = tick(fb, blocked, 1200, opt{divs: dv})
 	keys := escKeys(o.Notify)
-	sort.Strings(keys)
+	slices.Sort(keys)
 	check(t, "and of every Frozen Agent", []any{escKeys(o.Escalate), keys}, `[[],["blocked:w2:p1:1000","frozen:w1:p1:1000","frozen:w3:p1:1000"]]`)
 
 	// Several frozen at once share one head, so the shell sends one prompt.

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -203,7 +204,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	for k := range m {
 		l = append(l, k)
 	}
-	sort.Strings(l)
+	slices.Sort(l)
 	return l
 }
 
@@ -238,7 +239,7 @@ func (e *Env) SetBudget(corps string, pct *float64) error {
 		}
 		if st, err := os.Stat(e.State); err == nil && st.Size() > 0 {
 			names := e.corpsNames(true)
-			if _, set := budgets[corps]; !strsHas(names, corps) && !set {
+			if _, set := budgets[corps]; !slices.Contains(names, corps) && !set {
 				return BadBudget(fmt.Sprintf("no Corps '%s'; known: %s", corps, knownList(names)))
 			}
 		}
