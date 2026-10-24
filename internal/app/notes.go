@@ -187,6 +187,13 @@ func cmdNotes(e *Env, args []string, stdio IO) error {
 	if err != nil {
 		return err
 	}
+	// stdin is read before the lock: a writer whose pipe never closes must not block every reader
+	var b []byte
+	if set {
+		if b, err = io.ReadAll(stdio.In); err != nil {
+			return err
+		}
+	}
 	unlock, err := lockFile(filepath.Join(e.Home, "notes.lock"), true)
 	if err != nil {
 		return err
@@ -206,10 +213,6 @@ func cmdNotes(e *Env, args []string, stdio IO) error {
 		}
 		fmt.Fprintln(stdio.Out, strings.TrimRight(now, "\n"))
 		return nil
-	}
-	b, err := io.ReadAll(stdio.In)
-	if err != nil {
-		return err
 	}
 	text := strings.TrimSpace(string(b))
 	if text == "" {
