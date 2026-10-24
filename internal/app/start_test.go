@@ -21,6 +21,7 @@ func fakeHost(t *testing.T, s *sandbox, mode string) (pane string) {
 	t.Helper()
 	s.host = hosttest.New()
 	s.sim = agentsim.New(s.host, mode)
+	s.sim.Record = s.record
 	c, err := s.host.CreateWorkspace(t.TempDir(), "demo")
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +34,7 @@ func fakeHost(t *testing.T, s *sandbox, mode string) (pane string) {
 func hostCalls(s *sandbox) string {
 	var l []string
 	for _, c := range s.host.Calls() {
-		if c.Method != "Pane" && c.Method != "CreateWorkspace" {
+		if c.Method != "Pane" && c.Method != "Process" && c.Method != "CreateWorkspace" {
 			l = append(l, c.Method)
 		}
 	}
@@ -120,6 +121,7 @@ func TestDivisionNewArgs(t *testing.T) {
 	}
 	s.host = hosttest.New()
 	s.sim = agentsim.New(s.host, "takes")
+	s.sim.Record = s.record
 	// The Corps's workspace, w1, labelled "corps", at the repo.
 	if _, err := s.host.CreateWorkspace(repo, "corps"); err != nil {
 		t.Fatal(err)

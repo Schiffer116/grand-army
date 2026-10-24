@@ -1,7 +1,9 @@
 package claude_test
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -41,10 +43,30 @@ func TestLiveClaude(t *testing.T) {
 		t.Fatalf("timed out waiting for %s; the pane shows:\n%s", what, screen)
 	}
 	wait("a shell", func() bool { p, _ := h.Process(pane); return p.AtShell })
-	if err := h.Start(pane, c.Launch(harness.LaunchOpts{Model: "haiku"})); err != nil {
+	// The hooks drop their payloads in files: what Claude really sends.
+	hooks := t.TempDir()
+	reg := map[string]any{}
+	for _, ev := range []string{"SessionStart", "SessionEnd"} {
+		reg[ev] = []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "cat > " + filepath.Join(hooks, ev+".json")}}}}
+	}
+	settings, _ := json.Marshal(map[string]any{"hooks": reg})
+	if err := h.Start(pane, c.Launch(harness.LaunchOpts{Model: "haiku", Settings: string(settings)})); err != nil {
 		t.Fatal(err)
 	}
-	wait("Claude idle", func() bool { a, _ := h.Pane(pane); return a.Status == "idle" })
+	payload := func(ev string) []byte {
+		t.Helper()
+		var b []byte
+		wait(ev+" hook", func() bool { b, _ = os.ReadFile(filepath.Join(hooks, ev+".json")); return len(b) > 0 })
+		return b
+	}
+	start, err := c.Hook("SessionStart", payload("SessionStart"))
+	if err != nil || start.State != harness.Started || start.Session == "" {
+		t.Errorf("SessionStart hook = %+v, %v", start, err)
+	}
+	wait("Claude's box", func() bool {
+		screen, _ := h.Read(pane, host.ReadOpts{})
+		return strings.Contains(screen, "❯")
+	})
 
 	draft := func() bool {
 		screen, err := h.Read(pane, host.ReadOpts{ANSI: true})
@@ -74,9 +96,6 @@ func TestLiveClaude(t *testing.T) {
 	if draft() {
 		t.Error("ClearDraft left a draft")
 	}
-	if a, _ := h.Pane(pane); a.Status != "idle" {
-		t.Errorf("clearing the draft changed the Agent's state to %q", a.Status)
-	}
 
 	// Escape interrupts a turn, not the session: with no turn, Claude stays.
 	for _, k := range c.Keys(harness.Interrupt) {
@@ -92,6 +111,8 @@ func TestLiveClaude(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 	wait("back at the shell", func() bool { p, _ := h.Process(pane); return p.AtShell })
-	// (A session with no message is not saved and prints no resume hint, so
-	// ExitedDeliberately on a real exit is covered by tests/e2e.sh.)
+	end, err := c.Hook("SessionEnd", payload("SessionEnd"))
+	if err != nil || end.State != harness.Exited || end.Session != start.Session || !c.DeliberateExit(end.Reason) {
+		t.Errorf("SessionEnd hook after End = %+v, %v; want an exit of %s the user chose", end, err, start.Session)
+	}
 }

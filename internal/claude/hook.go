@@ -11,7 +11,7 @@ import (
 // Hook reads the payload of a Claude Code hook event. State follows the
 // design of ADR 0006: UserPromptSubmit is working, Stop idle, a permission
 // prompt (Notification) or an AskUserQuestion about to run (PreToolUse)
-// blocked, SessionEnd exited with its reason, SessionStart started. Other
+// blocked, SessionEnd exited with its reason (not when the process lives on), SessionStart started. Other
 // notifications and tools do not change the state.
 func (Claude) Hook(event string, payload []byte) (harness.HookEvent, error) {
 	var in struct {
@@ -41,7 +41,11 @@ func (Claude) Hook(event string, payload []byte) (harness.HookEvent, error) {
 			h.State = harness.Blocked
 		}
 	case "SessionEnd":
-		h.State, h.Reason = harness.Exited, in.Reason
+		// /clear and /resume end the session but not the process: the
+		// SessionStart of the next one follows.
+		if in.Reason != "clear" && in.Reason != "resume" {
+			h.State, h.Reason = harness.Exited, in.Reason
+		}
 	case "SessionStart":
 		h.State = harness.Started
 	default:

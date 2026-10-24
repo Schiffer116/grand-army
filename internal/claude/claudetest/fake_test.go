@@ -29,12 +29,10 @@ func TestFakeContract(t *testing.T) {
 		Idle:       Box(""),
 		LimitSince: 1000,
 		LimitReset: 2000,
-		CleanExit:  "bye\nexited s1\n$",
-		Crash:      "killed\n$",
-		Session:    "s1",
 		Submit:     hook("submit"), Stop: hook("stop"), Permission: hook("permission"), Question: hook("question"),
 		Note: hook("note"), End: hook("end"), Start: hook("start"),
 		Reason:      "exit",
+		OtherReason: "killed",
 		HookSession: "s1",
 		Write: func(t *testing.T, session string, lines []string) string {
 			p := f.Path(session)

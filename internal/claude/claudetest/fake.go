@@ -53,6 +53,9 @@ func (Fake) Launch(o harness.LaunchOpts) []string {
 	for _, t := range o.Disallow {
 		argv = append(argv, "--deny", t)
 	}
+	if o.Settings != "" {
+		argv = append(argv, "--settings", o.Settings)
+	}
 	return argv
 }
 
@@ -108,9 +111,8 @@ func (Fake) UsageLimit(screen string, since int64, local *time.Location) (int64,
 	return 0, false
 }
 
-func (Fake) ExitedDeliberately(tail, session string) bool {
-	return strings.Contains(tail, "exited "+session)
-}
+// DeliberateExit: the reason "exit".
+func (Fake) DeliberateExit(reason string) bool { return reason == "exit" }
 
 func (Fake) Hook(event string, payload []byte) (harness.HookEvent, error) {
 	var in struct{ Session, Reason, Cwd string }

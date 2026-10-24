@@ -31,6 +31,9 @@ func (Claude) Launch(o harness.LaunchOpts) []string {
 	for _, t := range o.Disallow {
 		argv = append(argv, "--disallowedTools", t)
 	}
+	if o.Settings != "" {
+		argv = append(argv, "--settings", o.Settings)
+	}
 	return argv
 }
 
@@ -57,7 +60,11 @@ func (Claude) PromptHeld(screen, text string) bool { return InputHolds(screen, t
 func (Claude) UsageLimit(screen string, since int64, local *time.Location) (int64, bool) {
 	return UsageLimitReset(screen, since, local)
 }
-func (Claude) ExitedDeliberately(tail, session string) bool { return ExitedDeliberately(tail, session) }
+
+// DeliberateExit: Claude Code's SessionEnd reasons that the user chose.
+func (Claude) DeliberateExit(reason string) bool {
+	return reason == "prompt_input_exit" || reason == "logout"
+}
 
 func (c Claude) Transcripts(session string) []string {
 	m, _ := filepath.Glob(filepath.Join(c.ConfigDir, "projects", "*", session+".jsonl"))

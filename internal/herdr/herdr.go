@@ -111,7 +111,18 @@ func (h Herdr) Snapshot() (core.Snapshot, error) {
 	if err := h.json(&r, "api", "snapshot"); err != nil || r.Result.Snapshot == nil {
 		return core.Snapshot{}, host.ErrUnreachable
 	}
-	s := core.Snapshot{Agents: panes(r.Result.Snapshot.Agents, false), Panes: panes(r.Result.Snapshot.Panes, true)}
+	// Herdr's own detection of Agents (status, session) is not used: a pane
+	// carries its name, which an Agent's rename may have put on the Agent.
+	names := map[string]*string{}
+	for _, a := range r.Result.Snapshot.Agents {
+		names[a.PaneID] = a.Name
+	}
+	s := core.Snapshot{Panes: panes(r.Result.Snapshot.Panes, true)}
+	for i, p := range s.Panes {
+		if n, ok := names[p.PaneID]; ok {
+			s.Panes[i].Name = n // an agent forgets its name across a restart: nil, not the pane's label
+		}
+	}
 	for _, w := range r.Result.Snapshot.Workspaces {
 		s.Workspaces = append(s.Workspaces, w.core())
 	}
@@ -202,22 +213,11 @@ func (h Herdr) Panes(workspace string) ([]core.SnapAgent, error) {
 	if err != nil {
 		return nil, err
 	}
-	agents := map[string]core.SnapAgent{}
-	for _, a := range snap.Agents {
-		agents[a.PaneID] = a
-	}
 	var out []core.SnapAgent
 	for _, p := range snap.Panes {
-		if workspace != "" && p.WorkspaceID != workspace {
-			continue
+		if workspace == "" || p.WorkspaceID == workspace {
+			out = append(out, p)
 		}
-		if a, ok := agents[p.PaneID]; ok {
-			if a.Name == nil {
-				a.Name = p.Name
-			}
-			p = a
-		}
-		out = append(out, p)
 	}
 	return out, nil
 }
@@ -233,12 +233,8 @@ func (h Herdr) Pane(id string) (core.SnapAgent, error) {
 	var a struct {
 		Result struct{ Agent wirePane }
 	}
-	if h.json(&a, "agent", "get", id) == nil && a.Result.Agent.Status != "" {
-		ag := a.Result.Agent.core(false)
-		if ag.Name == nil {
-			ag.Name = p.Name
-		}
-		return ag, nil
+	if h.json(&a, "agent", "get", id) == nil && a.Result.Agent.Name != nil {
+		p.Name = a.Result.Agent.Name
 	}
 	return p, nil
 }

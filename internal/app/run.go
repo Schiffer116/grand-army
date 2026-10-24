@@ -73,6 +73,7 @@ counts                              Agent count per status plus reports, as JSON
 log [-n lines] [-f]                 the Main Loop's event log, readable
 army                                the full Grand Army view model as JSON (Corps, Divisions, Agents, asks, log)
 dashboard [server args]             serve the live Grand Army console on 127.0.0.1:8430
+hook <event>                        Claude Code hook (JSON on stdin): records the session's state for its pane in state/agents/
 hook-stop                           Claude Code Stop hook: a turn that ends unreported gets a report from its final message
 tick                                run one Main Loop pass
 loop                                run the Main Loop forever
@@ -166,6 +167,7 @@ func init() {
 		"profile":            cmdProfile,
 		"log":                cmdLog,
 		"hook-stop":          cmdHookStop,
+		"hook":               cmdHook,
 		"tick":               func(e *Env, a []string, io IO) error { return e.Tick() },
 		"loop":               func(e *Env, a []string, io IO) error { e.Loop(); return nil },
 		"brief-after-dialog": cmdBriefAfterDialog,

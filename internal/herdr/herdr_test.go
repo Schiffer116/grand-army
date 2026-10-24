@@ -66,18 +66,19 @@ func TestErrors(t *testing.T) {
 	}
 }
 
-// What Herdr says of an Agent and of a bare pane maps to core's types: no JSON
-// tags there, so this is the one place the wire shape is read.
+// What Herdr says of a pane maps to core's types: no JSON tags there, so this
+// is the one place the wire shape is read. What Herdr detects of an Agent
+// (status, session) is not read.
 func TestWireMapping(t *testing.T) {
 	var agent wirePane
 	json.Unmarshal([]byte(`{"pane_id":"w3:p1","workspace_id":"w3","agent":"claude","agent_status":"idle","state_change_seq":4,
 		"agent_session":{"value":"s1"},"name":"demo","cwd":"/r","terminal_title_stripped":"Claude Code","tab_id":"w3:t1"}`), &agent)
 	a := agent.core(true)
-	if a.PaneID != "w3:p1" || *a.Agent != "claude" || a.Status != "idle" || *a.StateSeq != 4 || *a.Session != "s1" || *a.Name != "demo" || *a.Cwd != "/r" || *a.Title != "Claude Code" {
-		t.Errorf("agent: %+v", a)
+	if a.PaneID != "w3:p1" || a.Agent != nil || a.Status != "" || a.StateSeq != nil || a.Session != nil || *a.Name != "demo" || *a.Cwd != "/r" || *a.Title != "Claude Code" {
+		t.Errorf("pane: %+v", a)
 	}
 	var pane wirePane
-	json.Unmarshal([]byte(`{"pane_id":"w2:p1","workspace_id":"w2","agent_status":"unknown","label":"foo"}`), &pane)
+	json.Unmarshal([]byte(`{"pane_id":"w2:p1","workspace_id":"w2","label":"foo"}`), &pane)
 	if p := pane.core(true); p.Name == nil || *p.Name != "foo" || p.Agent != nil || p.Session != nil {
 		t.Errorf("pane named by its label: %+v", p)
 	}

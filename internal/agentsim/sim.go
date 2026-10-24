@@ -26,6 +26,12 @@ import (
 type Sim struct {
 	F    *hosttest.Fake
 	Mode string
+	// Record, when set, is told each Agent's state as its hooks would say it
+	// (status idle, working or blocked; turn counts the prompts it took, each one
+	// a round of hooks that ends where it began), and the Fake's panes carry no Agent:
+	// the Agents exist only as the records. Unset, the Fake's panes list the
+	// Agents themselves (for tests that stop at the Host seam).
+	Record func(pane, session, status string, turn int64)
 
 	mu     sync.Mutex
 	agents map[string]*agent
@@ -175,7 +181,12 @@ func (s *Sim) sync(pane string) {
 		p.Proc = host.Process{Name: "claude"}
 		p.Input = ""
 		p.Lines = []string{"history", "box: " + a.box}
-		seq, sid, claude := a.seq, a.sid, "claude"
-		p.Agent, p.Status, p.StateSeq, p.Session = &claude, a.status, &seq, &sid
+		if s.Record == nil {
+			seq, sid, claude := a.seq, a.sid, "claude"
+			p.Agent, p.Status, p.StateSeq, p.Session = &claude, a.status, &seq, &sid
+		}
 	})
+	if s.Record != nil {
+		s.Record(pane, a.sid, a.status, a.seq)
+	}
 }

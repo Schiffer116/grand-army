@@ -31,13 +31,20 @@ func (e *Env) Tick() error {
 	}
 	defer unlock()
 
-	snap, err := e.Snapshot()
-	if err != nil {
-		return ErrHostUnreachable
-	}
 	prev := e.ReadState()
 	now := e.now()
 	e.noteRestart(prev, now)
+	// After an outage (a tick that finds the Host unreachable, or a gap in the
+	// state) the Host restarts the sessions it killed: give them time before
+	// anything counts as gone.
+	if prev.UpdatedAt != 0 && now-prev.UpdatedAt > e.CoreConfig().RestartGap {
+		e.Restart.Store(now + int64(e.ExitGrace/time.Second))
+	}
+	snap, err := e.Snapshot()
+	if err != nil {
+		e.Restart.Store(now + int64(e.ExitGrace/time.Second))
+		return ErrHostUnreachable
+	}
 	retired := e.RetiredNames()
 	// What waits for a retired Corps stays on disk until it is reopened.
 	inbox := slices.DeleteFunc(e.ReadInbox(), func(m core.Ask) bool { return slices.Contains(retired, core.CorpsName(m.To)) })
@@ -264,8 +271,9 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 	for _, w := range l.Want {
 		switch w {
 		case "exited":
-			out, err := e.Host.Read(l.PaneID, host.ReadOpts{Recent: 20})
-			b := err == nil && e.harness().ExitedDeliberately(out, sid)
+			// The session ended by its own hook, for a reason the user chose.
+			r := e.exitOf(sid)
+			b := r != nil && e.harness().DeliberateExit(r.Reason)
 			o.Exited = &b
 		case "no_transcript":
 			b := !e.hasTranscript(sid)

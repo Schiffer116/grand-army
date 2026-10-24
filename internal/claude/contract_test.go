@@ -32,9 +32,6 @@ func TestContract(t *testing.T) {
 		Idle:       "● Pushed PR #18.\n" + limitBox,
 		// 2026-10-20 21:30 UTC, and the 11pm that follows.
 		LimitSince: 1792531800, LimitReset: 1792537200,
-		CleanExit: "● Pushed.\n\nResume this session with:\nclaude --resume s1\n\n~/r main ❯",
-		Crash:     "● Pushed.\nzsh: killed     claude\n~/r main ❯",
-		Session:   "s1",
 
 		Submit:      hook("UserPromptSubmit", `,"prompt":"hi"`),
 		Stop:        hook("Stop", `,"stop_hook_active":false`),
@@ -44,6 +41,7 @@ func TestContract(t *testing.T) {
 		End:         hook("SessionEnd", `,"reason":"prompt_input_exit"`),
 		Start:       hook("SessionStart", `,"source":"startup"`),
 		Reason:      "prompt_input_exit",
+		OtherReason: "other",
 		HookSession: "s1",
 
 		Write: func(t *testing.T, session string, lines []string) string {

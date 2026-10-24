@@ -34,10 +34,33 @@ func newSandbox(t *testing.T) *sandbox {
 // reads the screens its Agents draw.
 func (s *sandbox) inject(e *Env) {
 	if s.host != nil {
-		e.Host = s.host
+		e.Host = hooked{s.host, e.Agents, claudetest.Fake{}.DeliberateExit, e.ExitGrace, e.Restart}
 	}
 	if s.sim != nil {
 		e.Harness = claudetest.Fake{Dir: filepath.Join(s.home, "claude")}
+	}
+}
+
+// record is a hook of the Agent in pane: its session's state, as `berthier
+// hook` writes it.
+func (s *sandbox) record(pane, session, state string, turn int64) {
+	s.t.Helper()
+	s.recordExit(pane, session, state, fmt.Sprint(turn), "")
+}
+
+// recordExit is record of a hook named event that gave reason.
+func (s *sandbox) recordExit(pane, session, state, event, reason string) {
+	s.t.Helper()
+	dir := filepath.Join(s.home, "agents")
+	os.MkdirAll(dir, 0o755)
+	var old AgentRec
+	if readJSON(agentFile(dir, session), &old) && old.Pane == pane && old.State == state && old.Event == event && old.Reason == reason {
+		return // as the hook does: no news, no write
+	}
+	now := time.Now()
+	r := AgentRec{Session: session, Pane: pane, State: state, Event: event, Reason: reason, At: now.Unix(), Seq: now.UnixNano()}
+	if err := writeJSONAtomic(agentFile(dir, session), r, false); err != nil {
+		s.t.Fatal(err)
 	}
 }
 

@@ -65,6 +65,7 @@ type LaunchOpts struct {
 	Resume   string   // a session to resume; empty starts a new one
 	Model    string   // empty: the harness's default
 	Disallow []string // tools the agent may not use
+	Settings string   // extra settings for this session: a file or the settings themselves (tests register hooks here)
 }
 
 // ChatItem is one entry of an agent's conversation as the Console shows it.
@@ -133,9 +134,10 @@ type Harness interface {
 	// seconds)? since is when the stop was first seen; local is the zone used
 	// when the screen names none.
 	UsageLimit(screen string, since int64, local *time.Location) (reset int64, ok bool)
-	// ExitedDeliberately: does tail, the end of the pane's text after the
-	// agent vanished, show a clean exit of session rather than a crash?
-	ExitedDeliberately(tail, session string) bool
+	// DeliberateExit: is reason, the one a session-ended hook gave, the user's
+	// own choice (/exit, logout) rather than something to recover from? A crash
+	// gives no reason at all.
+	DeliberateExit(reason string) bool
 
 	// Hook reads the payload of a hook event (stdin of `berthier hook`).
 	// Events it does not know, or payloads it cannot read, are errors; events

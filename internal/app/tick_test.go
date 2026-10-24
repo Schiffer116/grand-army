@@ -45,7 +45,6 @@ func TestTickRevivesADeadAgent(t *testing.T) {
 
 	// Its process dies: no Agent listed, the pane back at its shell.
 	s.host.Update(pane, func(p *hosttest.Pane) {
-		p.Agent, p.Status, p.Session, p.StateSeq = nil, "unknown", nil, nil
 		p.Proc = host.Process{Name: "sh", AtShell: true}
 		p.Lines = []string{"zsh: killed     claude"}
 	})
@@ -77,10 +76,10 @@ func TestTickDoesNotReviveADeliberateExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.host.Update(pane, func(p *hosttest.Pane) {
-		p.Agent, p.Status, p.Session, p.StateSeq = nil, "unknown", nil, nil
 		p.Proc = host.Process{Name: "sh", AtShell: true}
-		p.Lines = []string{"bye", "exited s1"}
+		p.Lines = []string{"bye"}
 	})
+	s.recordExit(pane, "s1", "exited", "SessionEnd", "exit")
 	if err := e.Tick(); err != nil {
 		t.Fatal(err)
 	}
@@ -112,4 +111,21 @@ func TestStickyModel(t *testing.T) {
 	os.WriteFile(filepath.Join(tr, "s9.jsonl"), []byte(fmt.Sprintf("user hi\ncall %d fake-1 1000\n", e.now())), 0o644)
 	eq(t, "transcript wins", e.stickyModel("feat", "s9"), "fake-1")
 	eq(t, "record follows", e.ModelOf("feat"), "fake-1")
+}
+
+// Herdr forgets the name it was given across a restart: the next tick gives it back.
+func TestTickRestoresAForgottenName(t *testing.T) {
+	s := newSandbox(t)
+	pane := fakeHost(t, s, "takes")
+	s.sim.Attach(pane)
+	s.host.Update(pane, func(p *hosttest.Pane) { name := "demo"; p.Name = &name })
+	e := s.load()
+	if err := e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	s.host.Update(pane, func(p *hosttest.Pane) { p.Name = nil })
+	if err := e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "named again", len(events(s, "renamed")), 1)
 }

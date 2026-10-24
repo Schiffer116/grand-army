@@ -74,8 +74,9 @@ type Created struct {
 type Host interface {
 	// Snapshot lists every workspace and pane. It is the one call a Main Loop
 	// tick makes to observe the Host; ErrUnreachable when the Host is down.
-	// (Agent fields of a pane, Status and Session, are transitional: they go
-	// when agent state comes from hooks.)
+	// Panes carry no Agent: what runs in them, and what it is doing, comes
+	// from the Harness's hooks (the Agent fields of core.SnapAgent are
+	// Berthier's, filled above the Host).
 	Snapshot() (core.Snapshot, error)
 
 	// Workspaces lists the workspaces, in the Host's order.

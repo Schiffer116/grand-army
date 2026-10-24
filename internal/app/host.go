@@ -11,6 +11,7 @@ import (
 	"berthier/internal/core"
 	"berthier/internal/deliver"
 	"berthier/internal/harness"
+	"berthier/internal/host"
 )
 
 // The Host and Harness ports (ADR 0006), as Env uses them.
@@ -50,7 +51,7 @@ func (e *Env) notify(title, body string) { e.Host.Notify(title, body) }
 // model runs on CorpsModel. Berthier's persona comes from the SessionStart
 // hook (`berthier session-start`), not from a flag.
 func (e *Env) launchOpts(label, model string) harness.LaunchOpts {
-	o := harness.LaunchOpts{Model: model}
+	o := harness.LaunchOpts{Model: model, Settings: e.ClaudeSettings}
 	d, isDivision := e.ReadDivisions()[core.CorpsName(label)]
 	if model == "" && !isDivision {
 		o.Model = e.CorpsModel
@@ -64,12 +65,19 @@ func (e *Env) launchOpts(label, model string) harness.LaunchOpts {
 // errExited is a launch whose process ended before the Host saw an Agent.
 var errExited = errors.New("it exited at once")
 
-// launch starts the Harness in pane (at a shell prompt) and waits until the
-// Host lists an Agent there, then names it. It returns the Agent's status
-// ("blocked" behind a startup dialog). A process that ends before an Agent
-// appears (e.g. "No conversation found" on a resume) is errExited; none after
-// StartTimeoutMS is an error.
+// launch starts the Harness in pane (at a shell prompt) and waits until its
+// session says it started (the SessionStart hook), then names the Agent. It
+// returns the Agent's status. A process that ends before that (e.g. "No
+// conversation found" on a resume) is errExited. A process still running
+// without a word after StartTimeoutMS is blocked at startup (a dialog the user
+// must answer): "blocked", with an event that carries the screen.
 func (e *Env) launch(pane, name string, o harness.LaunchOpts) (string, error) {
+	// What the pane's earlier sessions said is no news of this one.
+	for _, r := range readAgentRecs(e.Agents) {
+		if r.Pane == pane {
+			os.Remove(agentFile(e.Agents, r.Session))
+		}
+	}
 	if err := e.Host.Start(pane, e.harness().Launch(o)); err != nil {
 		return "", err
 	}
@@ -80,7 +88,7 @@ func (e *Env) launch(pane, name string, o harness.LaunchOpts) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if a.Agent != nil && a.Status != "" && (a.Status != "unknown" || !time.Now().Before(deadline)) {
+		if a.Agent != nil && a.Status != "" {
 			if err := e.Host.RenamePane(pane, name); err != nil {
 				return "", err
 			}
@@ -93,7 +101,16 @@ func (e *Env) launch(pane, name string, o harness.LaunchOpts) (string, error) {
 			}
 		}
 		if !time.Now().Before(deadline) {
-			return "", fmt.Errorf("no agent in %s after %dms", pane, e.StartTimeoutMS)
+			if !ran {
+				return "", fmt.Errorf("no agent in %s after %dms", pane, e.StartTimeoutMS)
+			}
+			screen, _ := e.Host.Read(pane, host.ReadOpts{})
+			e.Event("start_blocked", fmt.Sprintf("%s in %s said nothing %dms after its start: blocked at startup", name, pane, e.StartTimeoutMS),
+				core.Fields{"pane": pane, "name": name, "screen": screen})
+			if err := e.Host.RenamePane(pane, name); err != nil {
+				return "", err
+			}
+			return "blocked", nil
 		}
 		time.Sleep(e.PromptPoll)
 	}

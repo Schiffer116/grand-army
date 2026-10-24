@@ -15,19 +15,13 @@ type wireWorkspace struct {
 }
 
 type wirePane struct {
-	PaneID       string  `json:"pane_id"`
-	WorkspaceID  string  `json:"workspace_id"`
-	TabID        *string `json:"tab_id"`
-	Agent        *string `json:"agent"`
-	Status       string  `json:"agent_status"`
-	Cwd          *string `json:"cwd"`
-	Title        *string `json:"terminal_title_stripped"`
-	Name         *string `json:"name"`
-	Label        *string `json:"label"`
-	StateSeq     *int64  `json:"state_change_seq"`
-	AgentSession *struct {
-		Value *string `json:"value"`
-	} `json:"agent_session"`
+	PaneID      string  `json:"pane_id"`
+	WorkspaceID string  `json:"workspace_id"`
+	TabID       *string `json:"tab_id"`
+	Cwd         *string `json:"cwd"`
+	Title       *string `json:"terminal_title_stripped"`
+	Name        *string `json:"name"`
+	Label       *string `json:"label"`
 }
 
 func (w wireWorkspace) core() core.Workspace {
@@ -40,13 +34,10 @@ func (w wireWorkspace) core() core.Workspace {
 
 // core maps a pane; withLabel names it by its label when it has no agent name.
 func (p wirePane) core(withLabel bool) core.SnapAgent {
-	out := core.SnapAgent{PaneID: p.PaneID, WorkspaceID: p.WorkspaceID, TabID: p.TabID, Agent: p.Agent,
-		Status: p.Status, Cwd: p.Cwd, Title: p.Title, Name: p.Name, StateSeq: p.StateSeq}
+	out := core.SnapAgent{PaneID: p.PaneID, WorkspaceID: p.WorkspaceID, TabID: p.TabID,
+		Cwd: p.Cwd, Title: p.Title, Name: p.Name}
 	if out.Name == nil && withLabel {
 		out.Name = p.Label
-	}
-	if p.AgentSession != nil {
-		out.Session = p.AgentSession.Value
 	}
 	return out
 }

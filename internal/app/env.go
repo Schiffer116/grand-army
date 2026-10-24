@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
+	"berthier/internal/claude"
 	"berthier/internal/core"
 	"berthier/internal/harness"
 	"berthier/internal/herdr"
@@ -20,13 +22,16 @@ type Env struct {
 	Root, Home                                   string
 	State, Log, Inbox, Reports, Demos, Divisions string
 	Ledger, Usage, Budgets, BoardsFile           string
-	Thaws, Briefs, NotesRead                     string
+	Thaws, Briefs, NotesRead, Agents             string
 	NotesStore                                   string
 	NotesMax                                     int
 	CacheWarm, FrozenMin, FreshEst               int64
 	SessionWait                                  time.Duration
 	SkipliBin, SkipliEnv                         string
 	BoardPoll, BoardFailAfter                    int64
+	Restart                                      *atomic.Int64 // until when (unix seconds) a Host restart may still be bringing sessions back
+	ExitGrace                                    time.Duration // how long a session that was terminated may take to start again
+	ClaudeSettings                               string        // BERTHIER_CLAUDE_SETTINGS: extra settings for every Claude it starts
 	Host                                         host.Host
 	Harness                                      harness.Harness // nil: Claude Code in ClaudeDir
 	BriefWait                                    time.Duration   // how long a Brief waits for a startup dialog
@@ -96,6 +101,7 @@ func LoadEnv(getenv func(string) string) Env {
 	e.Budgets = filepath.Join(e.Home, "budgets.json")
 	e.BoardsFile = filepath.Join(e.Home, "boards.json")
 	e.Thaws = filepath.Join(e.Home, "thaw")
+	e.Agents = filepath.Join(e.Home, "agents")
 	e.Briefs = filepath.Join(e.Home, "briefs")
 	e.NotesRead = filepath.Join(e.Home, "notes-read.json")
 	// Empty means the user's default Herdr session; tests point this at an
@@ -167,14 +173,17 @@ func LoadEnv(getenv func(string) string) Env {
 	// How often prompt_agent checks that Claude took a prompt (seconds).
 	e.PromptPoll = time.Duration(num("BERTHIER_PROMPT_POLL", 0.5) * float64(time.Second))
 	// Claude Code's own directory: live sessions (sessions/<pid>.json) and transcripts.
-	e.Host = herdr.FromEnv(getenv)
 	e.BriefWait = time.Duration(num("BERTHIER_BRIEF_WAIT", 3600) * float64(time.Second))
+	e.ExitGrace = time.Duration(num("BERTHIER_EXIT_GRACE", 30) * float64(time.Second))
+	e.Restart = new(atomic.Int64)
+	e.Host = hooked{herdr.FromEnv(getenv), e.Agents, claude.Claude{}.DeliberateExit, e.ExitGrace, e.Restart}
+	e.ClaudeSettings = getenv("BERTHIER_CLAUDE_SETTINGS")
 	e.ClaudeDir = str("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	// `land` restarts services with this and waits up to LandWait for them to work.
 	e.Systemctl = str("BERTHIER_SYSTEMCTL", "systemctl")
 	e.ConsoleURL = str("BERTHIER_CONSOLE_URL", "http://127.0.0.1:8430/")
 	e.LandWait = time.Duration(num("BERTHIER_LAND_WAIT", 120) * float64(time.Second))
-	for _, d := range []string{e.Home, e.Inbox, e.Reports, e.Demos, e.Thaws} {
+	for _, d := range []string{e.Home, e.Inbox, e.Reports, e.Demos, e.Thaws, e.Agents} {
 		os.MkdirAll(d, 0o755)
 	}
 	return e

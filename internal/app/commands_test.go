@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"berthier/internal/host"
 	"berthier/internal/host/hosttest"
 )
 
@@ -90,10 +91,12 @@ func TestLastCommand(t *testing.T) {
 	s.host = hosttest.New()
 	c, _ := s.host.CreateWorkspace(t.TempDir(), "demo")
 	agent := func(kind, status string) {
-		s.host.Update(c.PaneID, func(p *hosttest.Pane) {
-			sid := "s1"
-			p.Agent, p.Status, p.Session = &kind, status, &sid
-		})
+		s.host.Update(c.PaneID, func(p *hosttest.Pane) { p.Proc = host.Process{Name: kind} })
+		if kind == "claude" {
+			s.record(c.PaneID, "s1", status, 0)
+		} else {
+			os.Remove(agentFile(filepath.Join(s.home, "agents"), "s1"))
+		}
 	}
 	claude := t.TempDir()
 	s.env["CLAUDE_CONFIG_DIR"] = claude
@@ -109,7 +112,7 @@ func TestLastCommand(t *testing.T) {
 	agent("claude", "working")
 	_, errs, _ = s.sh("", "last", c.PaneID)
 	eq(t, "working says so", strings.Contains(errs, "still working"), true)
-	agent("codex", "idle")
+	agent("vim", "")
 	_, errs, code = s.sh("", "last", c.PaneID)
 	eq(t, "not claude", fmt.Sprint(code, " ", strings.Contains(errs, "not a Claude Agent")), "1 true")
 }

@@ -23,24 +23,6 @@ func ruleLines(lines []string) []int {
 	return r
 }
 
-// ExitedDeliberately: did Claude end by a deliberate exit (/exit, Ctrl+C)
-// rather than a crash? tail is its pane's tail. Only a clean exit prints its
-// resume hint; a killed process leaves none. The loop reads the pane on the
-// first tick after the agent vanished, so the hint is still at the bottom.
-func ExitedDeliberately(tail, session string) bool {
-	var l []string
-	for _, x := range strings.Split(tail, "\n") {
-		if strings.TrimSpace(x) != "" {
-			l = append(l, x)
-		}
-	}
-	if len(l) > 6 {
-		l = l[len(l)-6:]
-	}
-	t := strings.Join(l, "\n")
-	return strings.Contains(t, "Resume this session with") && strings.Contains(t, "claude --resume "+session)
-}
-
 var (
 	skipLine   = regexp.MustCompile(`^\s*$|^[^\p{L}\p{N}]+ \p{L}+ for [0-9]|^ {20}`)
 	limitLine  = regexp.MustCompile(`Usage limit reached|hit your [a-z ]*limit`)

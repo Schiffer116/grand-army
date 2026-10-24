@@ -27,12 +27,11 @@ type Subject struct {
 	HeldText                 string
 	Limit, Idle              string // stopped on a usage limit / not
 	LimitSince, LimitReset   int64
-	// A pane's tail after the agent vanished: a clean exit of Session, a crash.
-	CleanExit, Crash, Session string
 
 	// Hooks.
 	Submit, Stop, Permission, Question, Note, End, Start HookCase
-	Reason                                               string // the End hook's reason
+	Reason                                               string // the End hook's reason: a deliberate exit
+	OtherReason                                          string // a reason that is not
 	HookSession                                          string // the session all hook payloads name
 
 	// Transcripts. Write saves lines as session's transcript where H finds it
@@ -110,9 +109,9 @@ func Contract(t *testing.T, s Subject) {
 			"the text taken":                   {h.PromptHeld(s.Sent, s.HeldText), false},
 			"a suggestion is not our text":     {h.PromptHeld(s.Suggestion, s.HeldText), false},
 			"an empty box holds nothing":       {h.PromptHeld(s.Empty, s.HeldText), false},
-			"a clean exit of the session":      {h.ExitedDeliberately(s.CleanExit, s.Session), true},
-			"a clean exit of another session":  {h.ExitedDeliberately(s.CleanExit, s.Session+"-other"), false},
-			"a crash is not a deliberate exit": {h.ExitedDeliberately(s.Crash, s.Session), false},
+			"the user's own exit":              {h.DeliberateExit(s.Reason), true},
+			"another reason is not deliberate": {h.DeliberateExit(s.OtherReason), false},
+			"no reason is not deliberate":      {h.DeliberateExit(""), false},
 		} {
 			if c.got != c.want {
 				t.Errorf("%s: got %v", name, c.got)

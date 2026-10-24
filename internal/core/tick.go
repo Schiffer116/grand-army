@@ -69,7 +69,9 @@ type Worktree struct {
 	CheckoutPath *string
 }
 
-// SnapAgent is an agent, or a pane that may still hold a session, in a snapshot.
+// SnapAgent is a pane and, when its Harness's hooks report an Agent in it, that
+// Agent (Agent, Status, Session, StateSeq): the Host fills the pane, Berthier
+// the Agent.
 type SnapAgent struct {
 	PaneID      string
 	WorkspaceID string

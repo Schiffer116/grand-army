@@ -63,26 +63,6 @@ func TestUsageLimitReset(t *testing.T) {
 	}
 }
 
-func TestExitedDeliberately(t *testing.T) {
-	const sid = "0b6f2c1e-6a1d-4c55-9d1f-3f1e2a7c9b10"
-	quit := "● Pushed PR #18.\n\n" + box + "\n\nResume this session with:\nclaude --resume " + sid + "\n\n~/r/skipli main ❯"
-	cases := []struct {
-		name, tail string
-		want       bool
-	}{
-		{"clean exit", quit, true},
-		{"clean exit, blank lines below", quit + strings.Repeat("\n", 15), true},
-		{"another session's hint", strings.ReplaceAll(quit, sid, "11111111-2222-3333-4444-555555555555"), false},
-		{"killed process", "● Pushed PR #18.\n" + box + "\nzsh: killed     claude\n~/r/skipli main ❯", false},
-		{"old hint scrolled up", quit + "\n❯ claude --resume " + sid + "\n● Back again.\n" + box + "\nzsh: killed     claude\n~/r/skipli main ❯", false},
-	}
-	for _, c := range cases {
-		if got := ExitedDeliberately(c.tail, sid); got != c.want {
-			t.Errorf("%s: got %v", c.name, got)
-		}
-	}
-}
-
 func TestInputHolds(t *testing.T) {
 	rule := strings.Repeat("─", 50)
 	ask := "[berthier ask] from ui-tweaks: PR #20 (ui-tweaks -> dev): board header Edit board pencil (owner only, offline Solo only; save reloads header+favs, delete -> /boards). Screenshots: /tmp/a.png /tmp/b.png /tmp/c.png /tmp/d.png /tmp/e.png. Non-owner case not E2E'd (needs 2nd user), same owner rule as list."

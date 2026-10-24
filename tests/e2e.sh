@@ -15,6 +15,22 @@ export BERTHIER_HERDR_SESSION=$session BERTHIER_HOME=$work/home BERTHIER_START_T
 export BERTHIER_PROFILE_SINCE=$(date +%s) BERTHIER_PROFILE_PROJECTS="$(sed 's|[/.]|-|g' <<<"$work")*"
 export BERTHIER_RESTART_GAP=${BERTHIER_RESTART_GAP:-4}
 export BERTHIER_RESTART_SETTLE=${BERTHIER_RESTART_SETTLE:-3}
+# Berthier's state comes from Claude Code's hooks (ADR 0006): every Claude of
+# this test registers them, as ~/.claude/settings.json does for the user.
+mkdir -p "$work"
+hooks=$(jq -cn --arg b "$PWD/bin/berthier" '
+  def run($e): {type: "command", command: ($b + " hook " + $e)};
+  {hooks: {
+    SessionStart: [{hooks: [run("SessionStart")]}],
+    UserPromptSubmit: [{hooks: [run("UserPromptSubmit")]}],
+    Stop: [{hooks: [run("Stop")]}],
+    SessionEnd: [{hooks: [run("SessionEnd")]}],
+    Notification: [{matcher: "permission_prompt", hooks: [run("Notification")]}],
+    PreToolUse: [{matcher: "AskUserQuestion", hooks: [run("PreToolUse")]}],
+    PostToolUse: [{hooks: [run("PostToolUse")]}]}}')
+settings=$work/hooks.json
+jq -n --argjson h "$hooks" '$h' >"$settings"
+export BERTHIER_CLAUDE_SETTINGS=$settings
 clean_env=(env -u HERDR_ENV -u HERDR_SOCKET_PATH -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID)
 h() { "${clean_env[@]}" herdr --session "$session" "$@"; }
 step() { printf '\n== %s\n' "$*"; }
@@ -44,12 +60,15 @@ step "the Host and Harness contracts, against this Herdr and a real Claude"
 BERTHIER_CONTRACT_HERDR_SESSION=$session "${clean_env[@]}" go test -count=1 -run 'TestHostContract|TestLiveClaude' ./internal/herdr ./internal/claude
 
 mkdir -p "$repo" && git -C "$repo" init -q && git -C "$repo" commit -q --allow-empty -m init
+# Herdr relaunches Claude after a restart without the flags it was started with:
+# the repo registers the hooks itself, for those sessions.
+mkdir -p "$repo/.claude" && cp "$settings" "$repo/.claude/settings.local.json"
 pane=$(h workspace create --cwd "$repo" --label demo --no-focus | jq -re '.result.root_pane.pane_id')
 ws=$(h pane get "$pane" | jq -re '.result.pane.workspace_id')
 
 step "start a Main Agent with one turn (so its session can be resumed)"
 # The scratch dir is new to Claude: accept its folder trust dialog for this test.
-h agent start demo-main --kind claude --pane "$pane" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+h agent start demo-main --kind claude --pane "$pane" --timeout 60000 -- --model haiku --settings "$settings" >/dev/null 2>&1 || {
   h agent send-keys demo-main down enter >/dev/null
   h agent wait demo-main --until idle --timeout 60000 >/dev/null
 }
@@ -78,7 +97,7 @@ bin/berthier tick  # the loop's next pass sees the revived agent live
 step "a crashed session that never saved a transcript is forgotten, not Revived"
 # `claude --resume` of it prints "No conversation found" and returns to the shell.
 bare=$(h workspace create --cwd "$repo" --label bare --no-focus | jq -re '.result.root_pane.pane_id')
-h agent start bare --kind claude --pane "$bare" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+h agent start bare --kind claude --pane "$bare" --timeout 60000 -- --model haiku --settings "$settings" >/dev/null 2>&1 || {
   h agent send-keys bare down enter >/dev/null
   h agent wait bare --until idle --timeout 60000 >/dev/null
 }
@@ -96,7 +115,7 @@ step "a cold big Agent that crashes is Frozen: not Revived, its messages held; a
 mkdir -p "$work/cold/.claude"
 echo '{"permissions": {"allow": ["Bash"]}}' >"$work/cold/.claude/settings.local.json"
 cold=$(h workspace create --cwd "$work/cold" --label cold --no-focus | jq -re '.result.root_pane.pane_id')
-h agent start cold --kind claude --pane "$cold" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+h agent start cold --kind claude --pane "$cold" --timeout 60000 -- --model haiku --settings "$settings" >/dev/null 2>&1 || {
   h agent send-keys cold down enter >/dev/null
   h agent wait cold --until idle --timeout 60000 >/dev/null
 }
@@ -150,7 +169,8 @@ h workspace close "$(h pane get "$cold" | jq -re '.result.pane.workspace_id')" >
 
 step "the Stop hook makes an Agent report; an ask reaches an idle Agent"
 helper=$(h workspace create --cwd "$repo" --label helper --no-focus | jq -re '.result.root_pane.pane_id')
-hook=$(jq -cn --arg c "$PWD/bin/berthier hook-stop" '{hooks: {Stop: [{hooks: [{type: "command", command: $c}]}]}}')
+hook=$work/hooks-stop.json
+jq --arg c "$PWD/bin/berthier hook-stop" '.hooks.Stop += [{hooks: [{type: "command", command: $c}]}]' "$settings" >"$hook"
 h agent start helper --kind claude --pane "$helper" --timeout 60000 -- --model haiku --settings "$hook" >/dev/null 2>&1
 h agent prompt helper "Reply with just: pong" --wait --timeout 120000 >/dev/null
 helper_sid=$(h agent get helper | jq -r '.result.agent.agent_session.value')
@@ -248,7 +268,7 @@ step "a Herdr restart keeps every name and Revives nothing"
 # not assign at agent start (e.g. agent rename) and briefly lists those panes
 # without an agent.
 typed=$(h workspace create --cwd "$repo" --label typed --no-focus | jq -re '.result.root_pane.pane_id')
-h pane run "$typed" "claude --model haiku" >/dev/null
+h pane run "$typed" "claude --model haiku --settings $settings" >/dev/null
 for _ in $(seq 30); do h agent get "$typed" >/dev/null 2>&1 && break; sleep 1; done
 h agent wait "$typed" --until idle --timeout 60000 >/dev/null
 h agent prompt "$typed" "Reply with just: pong" --wait --timeout 90000 >/dev/null
@@ -258,9 +278,17 @@ names() { h api snapshot | jq -c '[.result.snapshot.agents[] | [.pane_id, .name,
 before=$(names) mark=$(wc -l <"$BERTHIER_HOME/loop.log")
 h server stop >/dev/null
 tmux kill-session -t "$session" 2>/dev/null || true
+bin/berthier tick || [[ $? == 3 ]] # the loop's tick while Herdr is down
 attach
 for _ in $(seq 20); do bin/berthier tick; sleep 1; done
-[[ $(names) == "$before" ]] || fail "names or sessions changed across restart: $before -> $(names)"
+[[ $(names) == "$before" ]] || fail "names or sessions changed across restart: $before -> $(names)
+$(tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" | cut -c1-300 | tail -20)
+$(h api snapshot | jq -c '.result.snapshot | {agents: [.agents[] | {pane_id, name, agent_status}], panes: [.panes[] | {pane_id, name, label}]}')
+$(bin/berthier tick 2>&1; echo rc=$?)
+$(tail -3 "$BERTHIER_HOME/loop.log" | cut -c1-300)
+$(for f in "$BERTHIER_HOME"/agents/*.json; do cut -c1-250 "$f"; done)
+$(jq -c '.agents | map_values({name, status, session_id})' "$BERTHIER_HOME/state.json")
+$(h pane process-info --pane "$typed" | jq -c .result.process_info.foreground_processes)"
 since=$work/since.log
 tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$since"
 (($(logged '.kind | startswith("revive")' "" "$since"))) && fail "Revive attempted after restart: $(cat "$since")"
@@ -270,7 +298,8 @@ step "a Herdr restart mid-turn: the cut-off Agent is told to continue, an idle o
 # Herdr resumes sessions idle; the Main Loop was down meanwhile (ticks exit 3
 # while Herdr is unreachable, writing no state), so the gap marks the restart.
 cut=$(h workspace create --cwd "$repo" --label cut --no-focus | jq -re '.result.root_pane.pane_id')
-h pane run "$cut" "claude --model haiku --settings '{\"permissions\":{\"allow\":[\"Bash\"]}}'" >/dev/null
+jq '.permissions.allow = ["Bash"]' "$settings" >"$work/hooks-bash.json"
+h pane run "$cut" "claude --model haiku --settings $work/hooks-bash.json" >/dev/null
 for _ in $(seq 30); do h agent get "$cut" >/dev/null 2>&1 && break; sleep 1; done
 h agent wait "$cut" --until idle --timeout 60000 >/dev/null
 h agent prompt "$cut" "Run this bash command, then reply with just: done. Command: sleep 300" >/dev/null
@@ -282,6 +311,7 @@ mark=$(wc -l <"$BERTHIER_HOME/loop.log")
 h server stop >/dev/null
 tmux kill-session -t "$session" 2>/dev/null || true
 sleep $((BERTHIER_RESTART_GAP + 2))
+bin/berthier tick || [[ $? == 3 ]]
 attach
 for _ in $(seq 40); do bin/berthier tick 2>/dev/null; sleep 1; done
 tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$work/since"
@@ -296,10 +326,9 @@ h pane read "$cut" --source recent-unwrapped --lines 200 | grep -qF "continue wh
 h workspace close "$(h pane get "$cut" | jq -re '.result.pane.workspace_id')" >/dev/null
 
 step "an Agent stopped on its usage limit is nudged once the limit has reset"
-# Haiku plays the stop (Claude renders the line as a real one); without hooks,
-# so the Stop hook's report does not become its last output.
+# Haiku plays the stop (Claude renders the line as a real one).
 limited=$(h workspace create --cwd "$repo" --label limited --no-focus | jq -re '.result.root_pane.pane_id')
-h pane run "$limited" "claude --model haiku --settings '{\"disableAllHooks\": true}'" >/dev/null
+h pane run "$limited" "claude --model haiku --settings $settings" >/dev/null
 for _ in $(seq 30); do h agent get "$limited" >/dev/null 2>&1 && break; sleep 1; done
 h agent wait "$limited" --until idle --timeout 60000 >/dev/null
 h agent rename "$limited" limited >/dev/null
@@ -492,7 +521,7 @@ step "a Corps is warned at 80% of its weekly budget and held at 100%"
 mkdir -p "$repo/sub"
 printf '#!/bin/sh\necho "$*" >>"%s/spoken"\n' "$work" >"$work/speak" && chmod +x "$work/speak"
 budgeted=$(h workspace create --cwd "$repo/sub" --label budgeted --no-focus | jq -re '.result.root_pane.pane_id')
-h agent start budgeted --kind claude --pane "$budgeted" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+h agent start budgeted --kind claude --pane "$budgeted" --timeout 60000 -- --model haiku --settings "$settings" >/dev/null 2>&1 || {
   h agent send-keys budgeted down enter >/dev/null
   h agent wait budgeted --until idle --timeout 60000 >/dev/null
 }
