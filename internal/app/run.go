@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 // IO is a command's standard streams.
@@ -153,14 +152,3 @@ func init() {
 		"brief-after-dialog": cmdBriefAfterDialog,
 	}
 }
-
-func strsHas(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }

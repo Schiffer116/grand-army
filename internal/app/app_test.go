@@ -88,10 +88,6 @@ func (s *sandbox) read(name string) string {
 	return string(b)
 }
 
-func (s *sandbox) lines(name string) []string {
-	return strings.Fields(strings.ReplaceAll(s.read(name), "\n", " \n "))[:0:0]
-}
-
 func eq(t *testing.T, name string, got, want any) {
 	t.Helper()
 	if fmt.Sprint(got) != fmt.Sprint(want) {

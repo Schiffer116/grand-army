@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -159,7 +160,7 @@ func pluginSkills(claudeDir, cwd string) []Skill {
 	for id := range inst.Plugins {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	var out []Skill
 	for _, id := range ids {
 		for _, e := range inst.Plugins[id] {

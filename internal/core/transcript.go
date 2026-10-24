@@ -2,7 +2,9 @@ package core
 
 import (
 	"encoding/json"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -80,12 +82,12 @@ func (t *Turn) Merge(o Turn) {
 	t.Big += o.Big
 	t.Reread += o.Reread
 	for _, r := range o.Rereads {
-		if len(t.Rereads) < 20 && !inStrs(t.Rereads, r) {
+		if len(t.Rereads) < 20 && !slices.Contains(t.Rereads, r) {
 			t.Rereads = append(t.Rereads, r)
 		}
 	}
 	for _, x := range o.Ships {
-		if !inStrs(t.Ships, x) {
+		if !slices.Contains(t.Ships, x) {
 			t.Ships = append(t.Ships, x)
 		}
 	}
@@ -202,7 +204,8 @@ func FoldTranscript(c Cursor, f TranscriptFile, lines [][]byte, place func(cwd s
 			c.Origin = "subagent"
 		}
 	}
-	c.Pending, c.Reads = copyStrMap(c.Pending), copyIntMap(c.Reads)
+	// Collect, not Clone: the maps are written to and Clone keeps nil
+	c.Pending, c.Reads = maps.Collect(maps.All(c.Pending)), maps.Collect(maps.All(c.Reads))
 	rows := map[string]*Turn{}
 	var order []string
 	row := func(l *tLine, model string, ts float64) *Turn {
@@ -262,7 +265,7 @@ func FoldTranscript(c Cursor, f TranscriptFile, lines [][]byte, place func(cwd s
 					}
 					if to != nil {
 						for _, x := range shipped(ship, text) {
-							if !inStrs(to.Ships, x) {
+							if !slices.Contains(to.Ships, x) {
 								to.Ships = append(to.Ships, x)
 							}
 						}
@@ -277,7 +280,7 @@ func FoldTranscript(c Cursor, f TranscriptFile, lines [][]byte, place func(cwd s
 				if key := c.Pending[b.ToolUseID]; key != "" {
 					if c.Reads[key] > 0 && last != nil {
 						last.Reread += n / charsPerToken
-						if len(last.Rereads) < 20 && !inStrs(last.Rereads, key) {
+						if len(last.Rereads) < 20 && !slices.Contains(last.Rereads, key) {
 							last.Rereads = append(last.Rereads, key)
 						}
 					}
@@ -291,10 +294,10 @@ func FoldTranscript(c Cursor, f TranscriptFile, lines [][]byte, place func(cwd s
 			}
 			if isText && !l.IsMeta && !l.IsCompactSummary && c.Parent == "" && !strings.HasPrefix(strings.TrimSpace(text), "<local-command") && !strings.HasPrefix(strings.TrimSpace(text), "<command-") {
 				c.Seq++
-				c.Origin, c.Prompt = OriginOf(text), clip(oneLineStr(text), 100)
+				c.Origin, c.Prompt = OriginOf(text), clip(oneLine(text), 100)
 				last = nil
 			} else if isText && c.Parent != "" && c.Seq == 0 {
-				c.Seq, c.Origin, c.Prompt = 1, "subagent", clip(oneLineStr(text), 100)
+				c.Seq, c.Origin, c.Prompt = 1, "subagent", clip(oneLine(text), 100)
 			}
 		case "assistant":
 			u := l.Message.Usage
@@ -487,22 +490,6 @@ func clip(s string, n int) string {
 	return s
 }
 
-func oneLineStr(s string) string { return strings.Join(strings.Fields(s), " ") }
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func itoa(n int) string { return Num(float64(n)) }
-
-func copyStrMap(m map[string]string) map[string]string {
-	c := make(map[string]string, len(m))
-	for k, v := range m {
-		c[k] = v
-	}
-	return c
-}
-
-func copyIntMap(m map[string]int) map[string]int {
-	c := make(map[string]int, len(m))
-	for k, v := range m {
-		c[k] = v
-	}
-	return c
-}

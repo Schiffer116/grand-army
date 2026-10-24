@@ -1,7 +1,9 @@
 package core
 
 import (
+	"maps"
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -87,7 +89,7 @@ func (u *Usage) rise(amt float64, spend []SpendAt, until float64) {
 		total += spend[i].USD
 	}
 	if total > 0 {
-		for _, k := range sortedMapKeys(acc) {
+		for _, k := range slices.Sorted(maps.Keys(acc)) {
 			u.ByCorps[k] += amt * acc[k] / total
 		}
 	} else {
@@ -129,7 +131,7 @@ func (u *Usage) step(r Row, spend []SpendAt) {
 // is how many ledger bytes the record has seen.
 func (u Usage) Fold(rows []Row, spend []SpendAt, offset int64) Usage {
 	u.Source = UsageSource
-	u.ByCorps = copyMap(u.ByCorps)
+	u.ByCorps = maps.Collect(maps.All(u.ByCorps))
 	sessions := make(map[string]SessionUse, len(u.Sessions))
 	for k, v := range u.Sessions {
 		sessions[k] = v
@@ -138,7 +140,7 @@ func (u Usage) Fold(rows []Row, spend []SpendAt, offset int64) Usage {
 	latest := 0.0
 	for _, r := range rows {
 		u.step(r, spend)
-		latest = math.Max(latest, r.Ts)
+		latest = max(latest, r.Ts)
 	}
 	for k, s := range u.Sessions {
 		if !(s.Ts > latest-1209600) {
@@ -147,23 +149,6 @@ func (u Usage) Fold(rows []Row, spend []SpendAt, offset int64) Usage {
 	}
 	u.Offset = offset
 	return u
-}
-
-func sortedMapKeys(m map[string]float64) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func copyMap(m map[string]float64) map[string]float64 {
-	c := make(map[string]float64, len(m))
-	for k, v := range m {
-		c[k] = v
-	}
-	return c
 }
 
 // CorpsUse is one Corps's share of the week against its allowance.

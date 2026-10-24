@@ -60,7 +60,7 @@ func TestProfileFold(t *testing.T) {
 	s.env["BERTHIER_PROFILE_WEEKS"] = "8"
 	s.sh("", "profile")
 	s.env["BERTHIER_PROFILE_WEEKS"] = "1"
-	out, _, _ = s.sh("", "profile")
+	s.sh("", "profile")
 	eq(t, "compacted", strings.Contains(s.read("profile/turns.jsonl"), `"old:1"`), false)
 	eq(t, "archived", jq(t, s.read("profile/archive.json"), "old.usd")+" "+jq(t, s.read("profile/archive.json"), "old.corps"), `4 "dotfiles"`)
 }

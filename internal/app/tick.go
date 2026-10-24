@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -232,9 +233,9 @@ func (e *Env) escalate(out core.TickOut) {
 		who, _ := g[0].Ev["to"].(string)
 		var target, msg string
 		if k.to == "-" {
-			target, msg = berthier, orStr(k.head, "[berthier-loop] Grand Army events:")
+			target, msg = berthier, cmp.Or(k.head, "[berthier-loop] Grand Army events:")
 		} else {
-			target, msg = k.to, orStr(k.head, "[berthier-loop] Events in your Divisions (you command them):")
+			target, msg = k.to, cmp.Or(k.head, "[berthier-loop] Events in your Divisions (you command them):")
 		}
 		for _, x := range g {
 			msg += "\n- " + x.Text
@@ -249,13 +250,6 @@ func (e *Env) escalate(out core.TickOut) {
 				core.Fields{"to": who, "events": len(g)})
 		}
 	}
-}
-
-func orStr(s, d string) string {
-	if s == "" {
-		return d
-	}
-	return s
 }
 
 // look adds to o what a decision waits on from a pane. A pane that cannot be

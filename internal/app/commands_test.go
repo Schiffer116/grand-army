@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,7 +37,7 @@ func TestUsageCommandsAreRegistered(t *testing.T) {
 	}
 	// And the other way: nothing registered is missing from the usage text.
 	for c := range commands {
-		if c != "brief-after-dialog" && !strsHas(list, c) {
+		if c != "brief-after-dialog" && !slices.Contains(list, c) {
 			t.Errorf("command %q is not in the usage text", c)
 		}
 	}

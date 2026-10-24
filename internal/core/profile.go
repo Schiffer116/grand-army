@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -48,8 +49,8 @@ func (a Archive) Add(t Turn) {
 		s = &ArchivedSession{Corps: t.Corps, Division: t.Division, Start: t.Start, Models: map[string]Tokens{}}
 		a[t.Session] = s
 	}
-	s.Start = math.Min(s.Start, t.Start)
-	s.End = math.Max(s.End, t.End)
+	s.Start = min(s.Start, t.Start)
+	s.End = max(s.End, t.End)
 	s.Turns++
 	m := s.Models[t.Model]
 	m.Add(t.Tokens)
@@ -340,7 +341,7 @@ func Profile(in ProfileIn) ProfileView {
 			sessionModels[t.Session] = map[string]float64{}
 		}
 		s.Totals.add(t)
-		s.End = math.Max(s.End, t.End)
+		s.End = max(s.End, t.End)
 		sessionModels[t.Session][t.Model] += t.USD
 	}
 	waste := Waste(week)
@@ -518,13 +519,13 @@ func Waste(turns []Turn) []WasteItem {
 		}
 		note("cache_miss", t, t.Miss, float64(t.Miss)*(wp-p.CacheRead/1e6))
 		note("big_result", t, t.Big, float64(t.Big)*wp)
-		if k := (key{"big_result", t.Session}); t.Big > 0 && t.BigTool != "" && !inStrs(bigTools[k], t.BigTool) {
+		if k := (key{"big_result", t.Session}); t.Big > 0 && t.BigTool != "" && !slices.Contains(bigTools[k], t.BigTool) {
 			bigTools[k] = append(bigTools[k], t.BigTool)
 		}
 		note("reread", t, t.Reread, float64(t.Reread)*wp)
 		if k := (key{"reread", t.Session}); t.Reread > 0 {
 			for _, r := range t.Rereads {
-				if len(rereads[k]) < 5 && !inStrs(rereads[k], r) {
+				if len(rereads[k]) < 5 && !slices.Contains(rereads[k], r) {
 					rereads[k] = append(rereads[k], r)
 				}
 			}
