@@ -1,9 +1,6 @@
-package console
+package claude
 
 import (
-	"berthier/internal/herdr"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,20 +49,5 @@ func TestSkills(t *testing.T) {
 	}
 	if got["shadow"].Src != "project" || got["pp:tdd"].Src != "plugin" {
 		t.Errorf("sources: %v", got)
-	}
-}
-
-func TestSkillsEndpoint(t *testing.T) {
-	a := NewArmy()
-	a.Set([]byte(promptArmy))
-	dir := t.TempDir()
-	srv := httptest.NewServer(Handler(a, herdr.Client{Bin: fakeChatHerdr(t, "claude", "s1")}, nil, NewTranscripts(dir)))
-	defer srv.Close()
-	res, err := http.Get(srv.URL + "/api/skills?pane=wA:p1")
-	if err != nil || res.StatusCode != 200 {
-		t.Fatalf("skills: %v %v", res, err)
-	}
-	if res, _ := http.Get(srv.URL + "/api/skills?pane=wZ:p9"); res.StatusCode != http.StatusNotFound {
-		t.Fatalf("unknown pane = %d", res.StatusCode)
 	}
 }

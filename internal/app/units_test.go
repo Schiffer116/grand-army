@@ -78,11 +78,15 @@ func TestSystemdUnitsStart(t *testing.T) {
 		}
 		t.Run(filepath.Base(u), func(t *testing.T) {
 			s := newSandbox(t)
-			dir := fakeHerdr(t, s)
-			s.mode(dir, "takes")
+			src, err := os.ReadFile("../../tests/fake-herdr")
+			if err != nil {
+				t.Fatal(err)
+			}
+			herdr := filepath.Join(t.TempDir(), "herdr")
+			os.WriteFile(herdr, src, 0o755)
 			cmd := exec.Command(bin, append(args, smoke.args...)...)
 			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + s.home, "BERTHIER_HOME=" + s.home,
-				"BERTHIER_ROOT=" + s.home, "BERTHIER_HERDR=" + s.env["BERTHIER_HERDR"], "BERTHIER_INTERVAL=0.1",
+				"BERTHIER_ROOT=" + s.home, "BERTHIER_HERDR=" + herdr, "BERTHIER_INTERVAL=0.1",
 				"BERTHIER_SPEAK=true", "CLAUDE_CONFIG_DIR=" + filepath.Join(s.home, "claude")}
 			stderr, _ := cmd.StderrPipe()
 			if err := cmd.Start(); err != nil {

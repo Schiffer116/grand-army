@@ -40,6 +40,9 @@ attach() {
 step "start isolated Herdr session"
 attach
 
+step "the Host and Harness contracts, against this Herdr and a real Claude"
+BERTHIER_CONTRACT_HERDR_SESSION=$session "${clean_env[@]}" go test -count=1 -run 'TestHostContract|TestLiveClaude' ./internal/herdr ./internal/claude
+
 mkdir -p "$repo" && git -C "$repo" init -q && git -C "$repo" commit -q --allow-empty -m init
 pane=$(h workspace create --cwd "$repo" --label demo --no-focus | jq -re '.result.root_pane.pane_id')
 ws=$(h pane get "$pane" | jq -re '.result.pane.workspace_id')
@@ -85,7 +88,7 @@ bare_sid=$(jq -r --arg p "$bare" '.agents[$p].session_id' "$BERTHIER_HOME/state.
 kill -KILL "$(claude_pid "$bare")"
 sleep 3
 bin/berthier tick
-(($(logged '.kind == "forgot" and .pane == $p' "$bare"))) || fail "transcript-less session not forgotten"
+(($(logged '.kind == "forgot" and .pane == $p' "$bare"))) || fail "transcript-less session not forgotten: $(tail -5 "$BERTHIER_HOME/loop.log"; jq -c --arg p "$bare" ".agents[\$p]" "$BERTHIER_HOME/state.json")"
 (($(logged '.kind == "revived" and .pane == $p' "$bare") == 0)) || fail "transcript-less session was Revived"
 
 step "a cold big Agent that crashes is Frozen: not Revived, its messages held; a Fresh Start delivers them after"
@@ -127,7 +130,7 @@ frozen notify cold "Reply with just: thawed" >/dev/null || fail "notify to a Fro
 frozen tick
 frozen tick
 (($(logged '(.kind | startswith("revive")) and .pane == $p' "$cold"))) && fail "Frozen agent was Revived"
-(($(logged '.kind == "delivered" and .pane == $p' "$cold"))) && fail "message delivered to a Frozen agent"
+(($(logged '.kind == "delivered" and .pane == $p' "$cold"))) && fail "message delivered to a Frozen agent: $(tail -6 "$BERTHIER_HOME/loop.log")"
 claude_pid "$cold" | grep -q . && fail "Frozen agent restarted"
 out=$(frozen fresh "$cold") || fail "fresh failed: $out"
 echo "$out"

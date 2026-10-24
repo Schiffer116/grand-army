@@ -42,10 +42,15 @@ type Subject struct {
 	Call                []string // ends on a real API call
 	CallAt, CallContext int64
 	CallModel           string
-	Spend               [][]byte // one turn of two calls
-	SpendIn, SpendOut   int64    // their summed tokens
-	SpendCalls          int
-	Place               harness.Placer
+	Chat                []string // a conversation: a user message, then an assistant reply
+	ChatItems           int      // how many items it makes
+	ChatLast            string   // the text of the assistant's reply
+	// Skill makes one skill available to an agent in the cwd it returns, and names it.
+	Skill             func(t *testing.T) (cwd, name string)
+	Spend             [][]byte // one turn of two calls
+	SpendIn, SpendOut int64    // their summed tokens
+	SpendCalls        int
+	Place             harness.Placer
 }
 
 // Contract is the behaviour every Harness adapter and the Fake share.
@@ -201,5 +206,32 @@ func Contract(t *testing.T, s Subject) {
 		if _, again := h.Spend(cur, f, nil, s.Place); len(again) != 0 {
 			t.Errorf("Spend of no new lines made rows: %+v", again)
 		}
+	})
+
+	t.Run("chat", func(t *testing.T) {
+		if _, ok := h.Chat("never-saved"); ok {
+			t.Error("a chat of an unsaved session")
+		}
+		s.Write(t, "chatty-1", s.Chat)
+		c, ok := h.Chat("chatty-1")
+		if !ok || len(c.Items) != s.ChatItems || c.Session != "chatty-1" {
+			t.Fatalf("Chat = %+v, %v; want %d items of chatty-1", c, ok, s.ChatItems)
+		}
+		if last, ok := h.LastMessage("chatty-1"); !ok || last.Text != s.ChatLast {
+			t.Errorf("LastMessage = %+v, %v; want %q", last, ok, s.ChatLast)
+		}
+		if _, ok := h.LastMessage("never-saved"); ok {
+			t.Error("a last message of an unsaved session")
+		}
+	})
+
+	t.Run("skills", func(t *testing.T) {
+		cwd, name := s.Skill(t)
+		for _, sk := range h.Skills(cwd) {
+			if sk.Name == name {
+				return
+			}
+		}
+		t.Errorf("Skills(%s) lacks %q", cwd, name)
 	})
 }

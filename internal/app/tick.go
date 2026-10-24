@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,11 +11,12 @@ import (
 	"time"
 
 	"berthier/internal/core"
+	"berthier/internal/host"
 )
 
-// ErrHerdrUnreachable is a tick that could not reach Herdr (e.g. not started
+// ErrHostUnreachable is a tick that could not reach the Host (e.g. not started
 // yet after boot); the loop logs outages once per streak.
-var ErrHerdrUnreachable = errors.New("herdr unreachable")
+var ErrHostUnreachable = host.ErrUnreachable
 
 // Tick runs one Main Loop pass: observe Herdr, decide (core.Tick), act, write
 // state. Only core.Tick writes the Grand Army State; this gathers the
@@ -33,7 +33,7 @@ func (e *Env) Tick() error {
 
 	snap, err := e.Snapshot()
 	if err != nil {
-		return ErrHerdrUnreachable
+		return ErrHostUnreachable
 	}
 	prev := e.ReadState()
 	now := e.now()
@@ -77,10 +77,9 @@ func (e *Env) Tick() error {
 		}
 		opts := e.launchOpts(label, e.ModelOf(label))
 		opts.Resume = r.SessionID
-		args := append([]string{"agent", "start", r.Name, "--kind", "claude", "--pane", r.PaneID, "--timeout", fmt.Sprint(e.StartTimeoutMS), "--"}, e.launchFlags(opts)...)
-		// Herdr counts the start a success even if Claude exited at once
-		// (e.g. "No conversation found"): the pane is back at its shell.
-		if _, err := e.H.Run(args...); err == nil && !e.paneAtShell(r.PaneID) {
+		// A start that fails at once (e.g. "No conversation found") leaves the
+		// pane back at its shell.
+		if _, err := e.launch(r.PaneID, r.Name, opts); err == nil && !e.paneAtShell(r.PaneID) {
 			e.Event("revived", fmt.Sprintf("revived %s in %s (session %s)", r.Name, r.PaneID, r.SessionID), r.Ev)
 		} else {
 			e.Event("revive_failed", fmt.Sprintf("revive failed: %s in %s (session %s)", r.Name, r.PaneID, r.SessionID), r.Ev)
@@ -97,7 +96,7 @@ func (e *Env) Tick() error {
 
 	// --- Give agents back the names Herdr forgot (e.g. across a restart).
 	for _, r := range out.Rename {
-		if _, err := e.H.Run("agent", "rename", r.PaneID, r.Name); err == nil {
+		if err := e.Host.RenamePane(r.PaneID, r.Name); err == nil {
 			e.Event("renamed", fmt.Sprintf("restored name %s in %s (session %s)", r.Name, r.PaneID, r.SessionID), r.Ev)
 		} else {
 			e.Event("rename_failed", fmt.Sprintf("name restore failed: %s in %s (session %s)", r.Name, r.PaneID, r.SessionID), r.Ev)
@@ -106,7 +105,7 @@ func (e *Env) Tick() error {
 
 	// --- Usage limits: nudge an Agent on once its limit has reset.
 	for _, r := range out.Resume {
-		if err := e.H.PromptAgent(r.PaneID, core.Tag("[berthier resume]", e.LimitPrompt)); err == nil {
+		if err := e.PromptAgent(r.PaneID, core.Tag("[berthier resume]", e.LimitPrompt)); err == nil {
 			e.Event("resumed", fmt.Sprintf("resumed %s in %s: usage limit reset", r.Name, r.PaneID), r.Ev)
 		} else {
 			e.Event("resume_failed", fmt.Sprintf("resume failed: %s in %s (usage limit reset): %s", r.Name, r.PaneID, err), with(r.Ev, "why", err.Error()))
@@ -116,7 +115,7 @@ func (e *Env) Tick() error {
 	// --- Restart: nudge an Agent whose turn the restart cut off; core retries a failed nudge and logs giving up.
 	for _, p := range out.Proceed {
 		// A failed nudge is retried by later ticks (core keeps the session).
-		if err := e.H.PromptAgent(p.PaneID, core.Tag("[berthier continue]", e.RestartPrompt)); err == nil {
+		if err := e.PromptAgent(p.PaneID, core.Tag("[berthier continue]", e.RestartPrompt)); err == nil {
 			e.Event("continued", fmt.Sprintf("continued %s in %s: restart interrupted its turn", p.Name, p.PaneID), p.Ev)
 		}
 	}
@@ -127,7 +126,7 @@ func (e *Env) Tick() error {
 			e.wake(d)
 			continue
 		}
-		if err := e.H.PromptAgent(d.PaneID, d.Text); err == nil {
+		if err := e.PromptAgent(d.PaneID, d.Text); err == nil {
 			os.Remove(filepath.Join(e.Inbox, d.ID+".json"))
 			e.Event("delivered", fmt.Sprintf("delivered ask %s -> %s (%s)", d.From, d.To, d.PaneID), d.Ev)
 		} else {
@@ -142,7 +141,7 @@ func (e *Env) Tick() error {
 
 	// --- Berthier's own trouble goes straight to the user.
 	for _, n := range out.Notify {
-		e.H.Run("notification", "show", "Berthier needs you", "--body", n.Text, "--sound", "request")
+		e.notify("Berthier needs you", n.Text)
 		e.Event("notified", "notified user: "+n.Text, n.Ev)
 	}
 
@@ -238,12 +237,12 @@ func (e *Env) escalate(out core.TickOut) {
 		for _, x := range g {
 			msg += "\n- " + x.Text
 		}
-		if target != "" && e.H.PromptAgent(target, msg) == nil {
+		if target != "" && e.PromptAgent(target, msg) == nil {
 			for _, x := range g {
 				e.Event("escalated", fmt.Sprintf("escalated %v to %s: %s", x.Ev["why"], who, x.Text), x.Ev)
 			}
 		} else {
-			e.H.Run("notification", "show", "Berthier unreachable", "--body", msg, "--sound", "request")
+			e.notify("Berthier unreachable", msg)
 			e.Event("unreachable", fmt.Sprintf("%s unreachable; notified user of %d event(s)", who, len(g)),
 				core.Fields{"to": who, "events": len(g)})
 		}
@@ -262,8 +261,8 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 	for _, w := range l.Want {
 		switch w {
 		case "exited":
-			out, err := e.H.Run("pane", "read", l.PaneID, "--source", "recent-unwrapped", "--lines", "20")
-			b := err == nil && e.harness().ExitedDeliberately(string(out), sid)
+			out, err := e.Host.Read(l.PaneID, host.ReadOpts{Recent: 20})
+			b := err == nil && e.harness().ExitedDeliberately(out, sid)
 			o.Exited = &b
 		case "no_transcript":
 			b := !e.hasTranscript(sid)
@@ -287,15 +286,15 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 			o.Auto = e.autoCheck(l.PaneID)
 		case "draft":
 			// Unreadable counts as empty: the prompt itself then fails or not, as before.
-			b, _ := e.H.HasDraft(l.PaneID)
+			b, _ := e.deliver().HasDraft(l.PaneID)
 			o.Draft = &b
 		case "limit_reset":
-			out, err := e.H.Run("pane", "read", l.PaneID, "--source", "visible")
+			out, err := e.Host.Read(l.PaneID, host.ReadOpts{})
 			if err != nil {
 				continue
 			}
 			o.LimitSeen = true
-			if t, ok := e.harness().UsageLimit(string(out), now, time.Local); ok {
+			if t, ok := e.harness().UsageLimit(out, now, time.Local); ok {
 				o.LimitReset = &t
 			}
 		}

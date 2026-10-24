@@ -11,7 +11,9 @@ import (
 )
 
 func TestFakeContract(t *testing.T) {
-	f := Fake{Dir: t.TempDir()}
+	f := Fake{Dir: t.TempDir(), SkillList: []harness.Skill{{Name: "deploy"}}, Chats: map[string]harness.Chat{
+		"chatty-1": {Session: "chatty-1", Items: []harness.ChatItem{{Role: "user", Text: "hi"}, {Role: "assistant", Text: "hello"}}},
+	}}
 	hook := func(event string) HookCase {
 		return HookCase{event, `{"session":"s1","reason":"exit"}`}
 	}
@@ -48,6 +50,10 @@ func TestFakeContract(t *testing.T) {
 		CallAt:      1500,
 		CallContext: 5000,
 		CallModel:   "fake-1",
+		Chat:        []string{"user hi", "assistant hello"},
+		ChatItems:   2,
+		ChatLast:    "hello",
+		Skill:       func(t *testing.T) (string, string) { return t.TempDir(), "deploy" },
 		Spend:       [][]byte{[]byte("turn 10 2"), []byte("turn 5 3")},
 		SpendIn:     15,
 		SpendOut:    5,

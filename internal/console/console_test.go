@@ -15,7 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"berthier/internal/herdr"
+	"berthier/internal/agentsim"
+	"berthier/internal/claude/claudetest"
+	"berthier/internal/deliver"
+	"berthier/internal/host/hosttest"
 )
 
 // fakeSource is an army source whose output is a file the test changes.
@@ -25,18 +28,26 @@ func fakeSource(t *testing.T, json string) (source func() ([]byte, error), data 
 	return func() ([]byte, error) { return os.ReadFile(data) }, data
 }
 
-// fakeClaude copies tests/fake-herdr, a Herdr whose one Claude takes prompts
-// the given way, into a temp dir that also holds its state.
-func fakeClaude(t *testing.T, mode string) (h herdr.Client, dir string) {
-	src, err := os.ReadFile("../../tests/fake-herdr")
-	if err != nil {
-		t.Fatal(err)
+// rig is the Console's ports on a Host with four Agents, one per pane of
+// promptArmy, taking prompts the way mode says (agentsim).
+type rig struct {
+	ports Ports
+	host  *hosttest.Fake
+	sim   *agentsim.Sim
+}
+
+func newRig(t *testing.T, mode string) rig {
+	f := hosttest.New()
+	sim := agentsim.New(f, mode)
+	for i := 0; i < 4; i++ {
+		c, err := f.CreateWorkspace(t.TempDir(), fmt.Sprintf("demo%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sim.Attach(c.PaneID)
 	}
-	dir = t.TempDir()
-	script := filepath.Join(dir, "herdr")
-	os.WriteFile(script, src, 0o755)
-	os.WriteFile(filepath.Join(dir, "mode"), []byte(mode), 0o644)
-	return herdr.Client{Bin: script, PromptPoll: time.Millisecond}, dir
+	h := claudetest.Fake{}
+	return rig{Ports{Host: f, Prompt: deliver.Delivery{Host: f, Harness: h, Poll: time.Microsecond}, Harness: h}, f, sim}
 }
 
 func TestServesLatestAndPushesChanges(t *testing.T) {
@@ -45,7 +56,7 @@ func TestServesLatestAndPushesChanges(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go Poll(ctx, a, source, 20*time.Millisecond)
-	srv := httptest.NewServer(Handler(a, herdr.Client{}, nil, nil))
+	srv := httptest.NewServer(Handler(a, Ports{}, nil))
 	defer srv.Close()
 
 	for a.Latest() == nil {
@@ -84,7 +95,7 @@ func TestServesLatestAndPushesChanges(t *testing.T) {
 }
 
 func TestServesPage(t *testing.T) {
-	srv := httptest.NewServer(Handler(NewArmy(), herdr.Client{}, nil, nil))
+	srv := httptest.NewServer(Handler(NewArmy(), Ports{}, nil))
 	defer srv.Close()
 	res, err := http.Get(srv.URL + "/")
 	if err != nil {
@@ -98,8 +109,9 @@ func TestServesPage(t *testing.T) {
 	}
 }
 
-const promptArmy = `{"corps":[{"agents":[{"pane_id":"wA:p1"}],"divisions":[{"agents":[{"pane_id":"wB:p1"}]}]}],
-	"berthier":{"pane_id":"wC:p1"},"berthier_divisions":[{"agents":[{"pane_id":"wD:p1"}]}]}`
+// promptArmy lists the four panes of newRig: w1:p1 .. w4:p1.
+const promptArmy = `{"corps":[{"agents":[{"pane_id":"w1:p1"}],"divisions":[{"agents":[{"pane_id":"w2:p1"}]}]}],
+	"berthier":{"pane_id":"w3:p1"},"berthier_divisions":[{"agents":[{"pane_id":"w4:p1"}]}]}`
 
 func postPrompt(t *testing.T, url, ctype, body string) *http.Response {
 	res, err := http.Post(url+"/api/prompt", ctype, bytes.NewBufferString(body))
@@ -110,50 +122,29 @@ func postPrompt(t *testing.T, url, ctype, body string) *http.Response {
 }
 
 func TestPromptSendsToKnownAgents(t *testing.T) {
-	h, dir := fakeClaude(t, "takes")
+	r := newRig(t, "takes")
 	a := NewArmy()
 	a.Set([]byte(promptArmy))
-	srv := httptest.NewServer(Handler(a, h, nil, nil))
+	srv := httptest.NewServer(Handler(a, r.ports, nil))
 	defer srv.Close()
-	t.Setenv("BERTHIER_HERDR_SESSION", "")
 
-	for _, pane := range []string{"wA:p1", "wB:p1", "wC:p1", "wD:p1"} {
+	for _, pane := range []string{"w1:p1", "w2:p1", "w3:p1", "w4:p1"} {
 		text := "hi " + pane + "; $(touch /tmp/x) 'quoted'\nsecond line"
 		body, _ := json.Marshal(map[string]string{"pane": pane, "text": text})
 		if res := postPrompt(t, srv.URL, "application/json", string(body)); res.StatusCode != http.StatusNoContent {
 			t.Fatalf("%s: status %d", pane, res.StatusCode)
 		}
-		calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
-		if !strings.Contains(string(calls), "agent prompt "+pane+" ") {
-			t.Fatalf("%s: herdr calls %q", pane, calls)
-		}
-		if got, _ := os.ReadFile(filepath.Join(dir, "text")); string(got) != text {
+		if got := r.sim.Took(pane); got != text {
 			t.Fatalf("%s: prompted %q, want %q", pane, got, text)
 		}
 	}
 }
 
-func TestPromptUsesBerthierSession(t *testing.T) {
-	h, dir := fakeClaude(t, "takes")
-	h.Session = "scratch"
-	a := NewArmy()
-	a.Set([]byte(promptArmy))
-	srv := httptest.NewServer(Handler(a, h, nil, nil))
-	defer srv.Close()
-
-	if res := postPrompt(t, srv.URL, "application/json", `{"pane":"wA:p1","text":"go"}`); res.StatusCode != http.StatusNoContent {
-		t.Fatalf("status %d", res.StatusCode)
-	}
-	if calls, _ := os.ReadFile(filepath.Join(dir, "calls")); !strings.Contains(string(calls), "--session scratch agent prompt wA:p1 go\n") {
-		t.Fatalf("herdr calls %q", calls)
-	}
-}
-
 func TestPromptRejects(t *testing.T) {
-	h, dir := fakeClaude(t, "takes")
+	r := newRig(t, "takes")
 	a := NewArmy()
 	a.Set([]byte(promptArmy))
-	srv := httptest.NewServer(Handler(a, h, nil, nil))
+	srv := httptest.NewServer(Handler(a, r.ports, nil))
 	defer srv.Close()
 
 	for _, c := range []struct {
@@ -162,27 +153,27 @@ func TestPromptRejects(t *testing.T) {
 	}{
 		{"unknown pane", "application/json", `{"pane":"wZ:p9","text":"hi"}`, http.StatusNotFound},
 		{"flag as pane", "application/json", `{"pane":"--help","text":"hi"}`, http.StatusNotFound},
-		{"empty text", "application/json", `{"pane":"wA:p1","text":"  "}`, http.StatusBadRequest},
+		{"empty text", "application/json", `{"pane":"w1:p1","text":"  "}`, http.StatusBadRequest},
 		{"bad json", "application/json", `{"pane":`, http.StatusBadRequest},
-		{"form post", "application/x-www-form-urlencoded", `pane=wA:p1&text=hi`, http.StatusUnsupportedMediaType},
+		{"form post", "application/x-www-form-urlencoded", `pane=w1:p1&text=hi`, http.StatusUnsupportedMediaType},
 	} {
 		if res := postPrompt(t, srv.URL, c.ctype, c.body); res.StatusCode != c.status {
 			t.Errorf("%s: status %d, want %d", c.name, res.StatusCode, c.status)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "calls")); err == nil {
-		t.Fatal("herdr ran for a rejected prompt")
+	if n := len(r.host.CallsTo("Type")); n != 0 {
+		t.Fatalf("the Host typed %d times for a rejected prompt", n)
 	}
 }
 
-func TestPromptReportsHerdrFailure(t *testing.T) {
-	h, _ := fakeClaude(t, "error")
+func TestPromptReportsHostFailure(t *testing.T) {
+	r := newRig(t, "error")
 	a := NewArmy()
 	a.Set([]byte(promptArmy))
-	srv := httptest.NewServer(Handler(a, h, nil, nil))
+	srv := httptest.NewServer(Handler(a, r.ports, nil))
 	defer srv.Close()
 
-	res := postPrompt(t, srv.URL, "application/json", `{"pane":"wA:p1","text":"hi"}`)
+	res := postPrompt(t, srv.URL, "application/json", `{"pane":"w1:p1","text":"hi"}`)
 	body, _ := io.ReadAll(res.Body)
 	if res.StatusCode != http.StatusBadGateway || !strings.Contains(string(body), "agent target x not found") {
 		t.Fatalf("status %d body %q", res.StatusCode, body)
@@ -204,7 +195,7 @@ func TestBudgetEndpoint(t *testing.T) {
 	}
 	a := NewArmy()
 	a.Set([]byte(`{"budget":{"corps":[{"name":"skipli"},{"name":"full"}]}}`))
-	srv := httptest.NewServer(Handler(a, herdr.Client{}, set, nil))
+	srv := httptest.NewServer(Handler(a, Ports{}, set))
 	defer srv.Close()
 	post := func(ctype, body string) int {
 		res, err := http.Post(srv.URL+"/api/budget", ctype, strings.NewReader(body))
@@ -245,7 +236,7 @@ func TestProfileRoute(t *testing.T) {
 		asked = append(asked, fmt.Sprintf("%d %q", week, session))
 		return []byte(`{"week":{}}`), nil
 	}
-	srv := httptest.NewServer(HandlerWith(NewArmy(), herdr.Client{}, nil, nil, src, nil, nil))
+	srv := httptest.NewServer(HandlerWith(NewArmy(), Ports{}, nil, src, nil, nil))
 	defer srv.Close()
 	for _, tc := range []struct {
 		q    string
@@ -263,7 +254,7 @@ func TestProfileRoute(t *testing.T) {
 	if got := strings.Join(asked, ","); got != `0 "",1 "abc"` {
 		t.Errorf("asked %s", got)
 	}
-	none := httptest.NewServer(Handler(NewArmy(), herdr.Client{}, nil, nil))
+	none := httptest.NewServer(Handler(NewArmy(), Ports{}, nil))
 	defer none.Close()
 	if resp, _ := http.Get(none.URL + "/api/profile"); resp.StatusCode != 404 {
 		t.Errorf("without a Profile: %d", resp.StatusCode)
@@ -286,7 +277,7 @@ func TestThaw(t *testing.T) {
 	}
 	a := NewArmy()
 	a.Set([]byte(`{"corps":[{"agents":[{"pane_id":"w1:p1"}],"divisions":[]}]}`))
-	srv := httptest.NewServer(HandlerWith(a, herdr.Client{}, nil, nil, nil, thaw, nil))
+	srv := httptest.NewServer(HandlerWith(a, Ports{}, nil, nil, thaw, nil))
 	defer srv.Close()
 	for _, c := range []struct {
 		name, ctype, body string
@@ -320,7 +311,7 @@ func TestBroadcastEndpoints(t *testing.T) {
 		}
 		return 3, 1, nil
 	}
-	srv := httptest.NewServer(HandlerWith(NewArmy(), herdr.Client{}, nil, nil, nil, nil, bc))
+	srv := httptest.NewServer(HandlerWith(NewArmy(), Ports{}, nil, nil, nil, bc))
 	defer srv.Close()
 	for _, c := range []struct {
 		path, ctype, body string

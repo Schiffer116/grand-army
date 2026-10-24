@@ -10,7 +10,7 @@ import (
 func TestNotes(t *testing.T) {
 	s := newSandbox(t)
 	sk := fakeSkipli(t, s)
-	e := LoadEnv(s.getenv)
+	e := s.load()
 	if _, err := e.EnsureBoard("demo", ""); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package console
+package claude
 
 // The Console's slash picker lists what an Agent's Claude Code can run as
 // /<name>: skills, custom commands, plugin skills and a few built-ins.
@@ -11,26 +11,25 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"berthier/internal/harness"
 )
 
-type Skill struct {
-	Name string `json:"name"`
-	Desc string `json:"desc"`
-	Src  string `json:"src"` // project, user, plugin or built-in
-}
+// Skill is the port's.
+type Skill = harness.Skill
 
 var builtins = []Skill{
-	{"clear", "Clear the conversation and free up context", "built-in"},
-	{"compact", "Summarize the conversation to free up context", "built-in"},
-	{"model", "Switch the model", "built-in"},
-	{"context", "Show what is using the context window", "built-in"},
-	{"cost", "Show session cost and usage", "built-in"},
-	{"resume", "Resume a past conversation", "built-in"},
-	{"rewind", "Roll the conversation or code back", "built-in"},
-	{"memory", "Edit memory files", "built-in"},
-	{"permissions", "Manage tool permissions", "built-in"},
-	{"mcp", "Manage MCP servers", "built-in"},
-	{"help", "Show help and commands", "built-in"},
+	{Name: "clear", Desc: "Clear the conversation and free up context", Src: "built-in"},
+	{Name: "compact", Desc: "Summarize the conversation to free up context", Src: "built-in"},
+	{Name: "model", Desc: "Switch the model", Src: "built-in"},
+	{Name: "context", Desc: "Show what is using the context window", Src: "built-in"},
+	{Name: "cost", Desc: "Show session cost and usage", Src: "built-in"},
+	{Name: "resume", Desc: "Resume a past conversation", Src: "built-in"},
+	{Name: "rewind", Desc: "Roll the conversation or code back", Src: "built-in"},
+	{Name: "memory", Desc: "Edit memory files", Src: "built-in"},
+	{Name: "permissions", Desc: "Manage tool permissions", Src: "built-in"},
+	{Name: "mcp", Desc: "Manage MCP servers", Src: "built-in"},
+	{Name: "help", Desc: "Show help and commands", Src: "built-in"},
 }
 
 // Skills lists what the Claude Code in cwd can invoke, nearest definition
@@ -111,7 +110,7 @@ func readSkill(path, fallback, prefix, src string) (Skill, bool) {
 			}
 		}
 	}
-	return Skill{prefix + name, clip(strings.Join(strings.Fields(desc), " "), 160), src}, true
+	return Skill{Name: prefix + name, Desc: clipText(strings.Join(strings.Fields(desc), " "), 160), Src: src}, true
 }
 
 // frontmatter parses the leading `---` block's top-level `key: value` lines,

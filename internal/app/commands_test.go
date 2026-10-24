@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"berthier/internal/host/hosttest"
 )
 
 // usageCommands are the commands the usage text lists.
@@ -45,39 +47,39 @@ func TestUsageCommandsAreRegistered(t *testing.T) {
 
 func TestPromptCommand(t *testing.T) {
 	s := newSandbox(t)
-	dir := fakeHerdr(t, s)
-	s.mode(dir, "takes")
-	_, errs, code := s.sh("", "prompt", "p1", "go on")
-	if code != 0 || errs != "" || calls(dir) != "pane read,agent prompt" {
-		t.Errorf("code %d %q calls %q", code, errs, calls(dir))
+	pane := fakeHost(t, s, "takes")
+	s.sim.Attach(pane)
+	_, errs, code := s.sh("", "prompt", pane, "go on")
+	if code != 0 || errs != "" || s.sim.Took(pane) != "go on" {
+		t.Errorf("code %d %q prompted %q", code, errs, s.sim.Took(pane))
 	}
-	text, _ := os.ReadFile(filepath.Join(dir, "text"))
-	if string(text) != "go on" {
-		t.Errorf("prompted %q", text)
-	}
-	s.mode(dir, "error")
-	_, errs, code = s.sh("", "prompt", "p1", "hi")
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "error")
+	s.sim.Attach(pane)
+	_, errs, code = s.sh("", "prompt", pane, "hi")
 	if code != 1 || !strings.Contains(errs, "agent target x not found") {
 		t.Errorf("error case: %d %q", code, errs)
 	}
 	// Never into the user's draft: refused, nothing typed.
-	s.mode(dir, "typing")
-	os.Remove(filepath.Join(dir, "calls"))
-	_, errs, code = s.sh("", "prompt", "p1", "hi")
-	if code != 1 || !strings.Contains(errs, "input box holds the user's draft") || calls(dir) != "pane read" {
-		t.Errorf("draft case: %d %q calls %q", code, errs, calls(dir))
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "typing")
+	s.sim.Attach(pane)
+	_, errs, code = s.sh("", "prompt", pane, "hi")
+	if code != 1 || !strings.Contains(errs, "input box holds the user's draft") || len(s.host.CallsTo("Type")) != 0 {
+		t.Errorf("draft case: %d %q calls %q", code, errs, hostCalls(s))
 	}
-	_, errs, code = s.sh("", "prompt", "p1")
+	_, errs, code = s.sh("", "prompt", pane)
 	if code != 1 || !strings.Contains(errs, "usage: berthier prompt") {
 		t.Errorf("usage case: %d %q", code, errs)
 	}
-	s.mode(dir, "takes")
-	_, errs, code = s.sh("line one\nline \"two\"\n", "prompt", "p1", "-")
-	text, _ = os.ReadFile(filepath.Join(dir, "text"))
-	if code != 0 || errs != "" || string(text) != "line one\nline \"two\"" {
-		t.Errorf("stdin: %d %q prompted %q", code, errs, text)
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "takes")
+	s.sim.Attach(pane)
+	_, errs, code = s.sh("line one\nline \"two\"\n", "prompt", pane, "-")
+	if code != 0 || errs != "" || s.sim.Took(pane) != "line one\nline \"two\"" {
+		t.Errorf("stdin: %d %q prompted %q", code, errs, s.sim.Took(pane))
 	}
-	_, errs, code = s.sh("\n", "prompt", "p1", "-")
+	_, errs, code = s.sh("\n", "prompt", pane, "-")
 	if code != 1 || !strings.Contains(errs, "usage: berthier prompt") {
 		t.Errorf("empty stdin: %d %q", code, errs)
 	}
@@ -85,14 +87,16 @@ func TestPromptCommand(t *testing.T) {
 
 func TestLastCommand(t *testing.T) {
 	s := newSandbox(t)
-	herdr := filepath.Join(t.TempDir(), "herdr")
+	s.host = hosttest.New()
+	c, _ := s.host.CreateWorkspace(t.TempDir(), "demo")
 	agent := func(kind, status string) {
-		os.WriteFile(herdr, []byte(`#!/bin/sh
-[ "$1 $2" = "agent get" ] && echo '{"result":{"agent":{"agent":"`+kind+`","agent_status":"`+status+`","agent_session":{"value":"s1"}}}}'
-`), 0o755)
+		s.host.Update(c.PaneID, func(p *hosttest.Pane) {
+			sid := "s1"
+			p.Agent, p.Status, p.Session = &kind, status, &sid
+		})
 	}
 	claude := t.TempDir()
-	s.env["BERTHIER_HERDR"], s.env["CLAUDE_CONFIG_DIR"] = herdr, claude
+	s.env["CLAUDE_CONFIG_DIR"] = claude
 	os.MkdirAll(filepath.Join(claude, "projects", "-repo"), 0o755)
 	os.WriteFile(filepath.Join(claude, "projects", "-repo", "s1.jsonl"), []byte(
 		`{"type":"user","message":{"content":"go"}}`+"\n"+
@@ -100,12 +104,12 @@ func TestLastCommand(t *testing.T) {
 			`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}`+"\n"+
 			`{"type":"assistant","message":{"content":[{"type":"text","text":"Done: all green.\n"}]}}`+"\n"), 0o644)
 	agent("claude", "idle")
-	out, errs, code := s.sh("", "last", "p1")
+	out, errs, code := s.sh("", "last", c.PaneID)
 	eq(t, "last message", fmt.Sprint(code, out, errs), "0Done: all green.\n")
 	agent("claude", "working")
-	_, errs, _ = s.sh("", "last", "p1")
+	_, errs, _ = s.sh("", "last", c.PaneID)
 	eq(t, "working says so", strings.Contains(errs, "still working"), true)
 	agent("codex", "idle")
-	_, errs, code = s.sh("", "last", "p1")
+	_, errs, code = s.sh("", "last", c.PaneID)
 	eq(t, "not claude", fmt.Sprint(code, " ", strings.Contains(errs, "not a Claude Agent")), "1 true")
 }

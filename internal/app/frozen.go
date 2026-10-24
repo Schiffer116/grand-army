@@ -13,7 +13,6 @@ import (
 
 	"berthier/internal/core"
 	"berthier/internal/harness"
-	"berthier/internal/herdr"
 )
 
 // Frozen Agents: the user's choice (`revive`, `fresh`, the Console) is a file
@@ -125,12 +124,12 @@ func linesSince(path string, offset int64) []string {
 func (e *Env) freshStart(f core.FreshStart) {
 	fail := func(why string) {
 		e.Event("fresh_failed", fmt.Sprintf("Fresh Start failed: %s in %s: %s", f.Name, f.PaneID, why), with(f.Ev, "why", why))
-		e.H.Run("notification", "show", "Fresh Start failed", "--body", fmt.Sprintf("%s (%s): %s", f.Name, f.PaneID, why), "--sound", "request")
+		e.notify("Fresh Start failed", fmt.Sprintf("%s (%s): %s", f.Name, f.PaneID, why))
 	}
 	if f.Live {
 		// Claude stopped on its usage limit: end it, back to the shell.
 		for _, k := range e.harness().Keys(harness.End) {
-			e.H.Run("pane", "send-keys", f.PaneID, herdr.KeyName(k))
+			e.Host.Key(f.PaneID, k)
 			time.Sleep(300 * time.Millisecond)
 		}
 		for deadline := time.Now().Add(15 * time.Second); !e.paneAtShell(f.PaneID) && time.Now().Before(deadline); {
@@ -207,15 +206,15 @@ func (e *Env) wake(d core.Delivery) {
 			brief = strings.TrimSpace(string(b))
 		}
 	}
-	if err := e.H.ClearAgent(d.PaneID); err != nil {
+	if err := e.ClearAgent(d.PaneID); err != nil {
 		e.Event("wake_clear_failed", fmt.Sprintf("wake: /clear failed: %s -> %s (%s), ask %s: %s", d.From, d.To, d.PaneID, d.ID, err), with(d.Ev, "why", err.Error()))
 		return
 	}
 	if name != "" {
-		// Herdr keeps a pane's name across /clear; make sure.
-		e.H.Run("agent", "rename", d.PaneID, name)
+		// The Host keeps a pane's name across /clear; make sure.
+		e.Host.RenamePane(d.PaneID, name)
 	}
-	if err := e.H.PromptAgent(d.PaneID, d.Text+core.Rebuild(report, brief)); err != nil {
+	if err := e.PromptAgent(d.PaneID, d.Text+core.Rebuild(report, brief)); err != nil {
 		e.Event("delivery_failed", fmt.Sprintf("wake delivery failed after /clear: %s (%s), ask %s: %s", d.To, d.PaneID, d.ID, err), with(d.Ev, "why", err.Error()))
 		return
 	}

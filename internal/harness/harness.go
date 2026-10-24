@@ -67,6 +67,44 @@ type LaunchOpts struct {
 	Disallow []string // tools the agent may not use
 }
 
+// ChatItem is one entry of an agent's conversation as the Console shows it.
+type ChatItem struct {
+	Role   string `json:"role"` // user | assistant | tool
+	Text   string `json:"text,omitempty"`
+	Tool   string `json:"tool,omitempty"`
+	Input  string `json:"input,omitempty"`
+	Result string `json:"result,omitempty"`
+	Error  bool   `json:"error,omitempty"`
+	At     string `json:"at,omitempty"`
+}
+
+// AgentInfo is what a session's record says about the agent itself, from its
+// latest assistant message.
+type AgentInfo struct {
+	Model         string `json:"model,omitempty"`    // friendly: "Opus 5.5"
+	ModelID       string `json:"model_id,omitempty"` // as the API names it
+	Effort        string `json:"effort,omitempty"`
+	ContextTokens int    `json:"context_tokens,omitempty"`
+	ContextPct    int    `json:"context_pct,omitempty"`
+	Branch        string `json:"branch,omitempty"`
+	Cwd           string `json:"cwd,omitempty"`
+}
+
+// Chat is the conversation of a session, read-only.
+type Chat struct {
+	Session string // the session whose record this is (a fork can take over)
+	Rev     int64  // changes whenever Items do
+	Items   []ChatItem
+	Info    AgentInfo
+}
+
+// Skill is something the agent can be told to run (a slash command).
+type Skill struct {
+	Name string `json:"name"`
+	Desc string `json:"desc"`
+	Src  string `json:"src"` // project, user, plugin or built-in
+}
+
 // Placer says which Corps and Division a working directory belongs to; ok is
 // false for none.
 type Placer func(cwd string) (corps, division string, ok bool)
@@ -119,6 +157,15 @@ type Harness interface {
 	// Interrupted: does the end of a transcript (its last lines) stop mid-turn,
 	// not on a finished turn or the user's own interrupt?
 	Interrupted(lines []string) bool
+	// Chat is the conversation of the session an agent shows (reads the disk,
+	// and only what was appended since the last call); a session forked into
+	// a background process shows the fork. False when it has no record.
+	Chat(session string) (Chat, bool)
+	// LastMessage is the final assistant message of the session's chat.
+	LastMessage(session string) (ChatItem, bool)
+	// Skills are what the agent running in cwd can be told to run, nearest
+	// definition winning a name (reads the disk).
+	Skills(cwd string) []Skill
 	// CacheOf reads the end of a transcript for the session's last real call.
 	CacheOf(lines []string) (core.Cache, bool)
 }

@@ -1,4 +1,4 @@
-package console
+package claude
 
 // The chat view of one Agent: its Claude Code session transcript, read-only,
 // or the pane's recent terminal output for any other kind of Agent.
@@ -13,18 +13,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"berthier/internal/harness"
 )
 
-// ChatItem is one entry of the conversation as the page shows it.
-type ChatItem struct {
-	Role   string `json:"role"` // user | assistant | tool
-	Text   string `json:"text,omitempty"`
-	Tool   string `json:"tool,omitempty"`
-	Input  string `json:"input,omitempty"`
-	Result string `json:"result,omitempty"`
-	Error  bool   `json:"error,omitempty"`
-	At     string `json:"at,omitempty"`
-}
+// The chat types are the port's.
+type (
+	ChatItem  = harness.ChatItem
+	AgentInfo = harness.AgentInfo
+)
 
 const (
 	chatItems   = 150  // most recent items sent to the page
@@ -46,18 +43,6 @@ type transcript struct {
 	items  []ChatItem
 	tools  map[string]int // tool_use id -> index in items
 	info   AgentInfo
-}
-
-// AgentInfo is what the transcript says about the Agent itself: from the
-// latest assistant message, updated as lines are appended (never re-read).
-type AgentInfo struct {
-	Model         string `json:"model,omitempty"`    // friendly: "Opus 5.5"
-	ModelID       string `json:"model_id,omitempty"` // as the API names it
-	Effort        string `json:"effort,omitempty"`
-	ContextTokens int    `json:"context_tokens,omitempty"`
-	ContextPct    int    `json:"context_pct,omitempty"`
-	Branch        string `json:"branch,omitempty"`
-	Cwd           string `json:"cwd,omitempty"`
 }
 
 const (
@@ -290,7 +275,7 @@ func (tr *transcript) add(line []byte) {
 				}
 			case "tool_result":
 				if i, ok := tr.tools[b.ToolUseID]; ok {
-					tr.items[i].Result = clip(resultText(b.Content), resultMax)
+					tr.items[i].Result = clipText(toolResultText(b.Content), resultMax)
 					tr.items[i].Error = b.IsError
 				}
 			}
@@ -306,7 +291,7 @@ func (tr *transcript) add(line []byte) {
 				}
 			case "tool_use":
 				tr.tools[b.ID] = len(tr.items)
-				tr.items = append(tr.items, ChatItem{Role: "tool", Tool: b.Name, Input: clip(toolInput(b.Input), inputMax), At: e.Timestamp})
+				tr.items = append(tr.items, ChatItem{Role: "tool", Tool: b.Name, Input: clipText(toolInput(b.Input), inputMax), At: e.Timestamp})
 			}
 		}
 	}
@@ -351,7 +336,7 @@ func toolInput(raw json.RawMessage) string {
 	return string(raw)
 }
 
-func resultText(raw json.RawMessage) string {
+func toolResultText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		return s
@@ -369,7 +354,7 @@ func resultText(raw json.RawMessage) string {
 	return strings.Join(parts, "\n")
 }
 
-func clip(s string, n int) string {
+func clipText(s string, n int) string {
 	if r := []rune(s); len(r) > n {
 		return string(r[:n]) + "…"
 	}

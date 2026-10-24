@@ -361,9 +361,9 @@ func cmdAsk(e *Env, args []string, io IO) error {
 	if len(args) != 2 || args[1] == "" {
 		return die(`usage: berthier ask <corps> "<what you need and why>"`)
 	}
-	pane := e.getenv("HERDR_PANE_ID")
+	pane := e.selfPane()
 	if pane == "" {
-		return die("run this from an Agent's Herdr pane (no HERDR_PANE_ID)")
+		return die("run this from an Agent's pane in the Host (not in one)")
 	}
 	if st, err := os.Stat(e.State); err != nil || st.Size() == 0 {
 		return die("no Grand Army State yet; is berthier-loop running?")
@@ -572,7 +572,7 @@ func cmdReport(e *Env, args []string, io IO) error {
 	if len(args) != 1 || args[0] == "" {
 		return die(`usage: berthier report "<one line: what you are doing, or needs you: ...>"`)
 	}
-	sid, pane := e.getenv("CLAUDE_CODE_SESSION_ID"), e.getenv("HERDR_PANE_ID")
+	sid, pane := e.getenv("CLAUDE_CODE_SESSION_ID"), e.selfPane()
 	if pane == "" || sid == "" {
 		return nil
 	}
@@ -609,7 +609,7 @@ const maxDemos = 10
 // session, so the global rule is safe everywhere.
 func cmdDemo(e *Env, args []string, io IO) error {
 	const usage = "usage: berthier demo <url> [label] | --clear [url] | --list"
-	sid, pane := e.getenv("CLAUDE_CODE_SESSION_ID"), e.getenv("HERDR_PANE_ID")
+	sid, pane := e.getenv("CLAUDE_CODE_SESSION_ID"), e.selfPane()
 	if len(args) == 0 {
 		return die("%s", usage)
 	}
@@ -681,7 +681,7 @@ func cmdHookStop(e *Env, args []string, io IO) error {
 	if err != nil {
 		return nil
 	}
-	pane := e.getenv("HERDR_PANE_ID")
+	pane := e.selfPane()
 	if pane == "" || in.Session == "" {
 		return nil
 	}
@@ -853,17 +853,11 @@ func cmdCorpsNew(e *Env, args []string, io IO) error {
 		exec.Command("git", "-C", dir, "init", "-q").Run()
 		exec.Command("git", "-C", dir, "commit", "-q", "--allow-empty", "-m", "Initial commit").Run()
 	}
-	var r struct {
-		Result struct {
-			RootPane struct {
-				PaneID string `json:"pane_id"`
-			} `json:"root_pane"`
-		}
-	}
-	if err := e.H.JSON(&r, "workspace", "create", "--cwd", dir, "--label", name, "--no-focus"); err != nil || r.Result.RootPane.PaneID == "" {
+	created, err := e.Host.CreateWorkspace(dir, name)
+	if err != nil {
 		return die("could not create workspace '%s'", name)
 	}
-	pane := r.Result.RootPane.PaneID
+	pane := created.PaneID
 	agent := core.Slug(name)
 	switch e.StartClaude(agent, pane, brief, name, "", func(s string) { fmt.Fprintln(io.Err, s) }) {
 	case "ready":
@@ -966,18 +960,16 @@ func cmdAdopt(e *Env, args []string, io IO) error {
 func (e *Env) callerWorkspace() (id, label string, err error) {
 	id = e.getenv("BERTHIER_WORKSPACE")
 	if id == "" {
-		id = e.getenv("HERDR_WORKSPACE_ID")
+		id = e.selfWorkspace()
 	}
 	if id == "" {
-		return "", "", die("run this from the Main Agent's Herdr pane (no HERDR_WORKSPACE_ID)")
+		return "", "", die("run this from the Main Agent's pane in the Host (not in one)")
 	}
-	var r struct {
-		Result struct{ Workspace struct{ Label string } }
-	}
-	if err := e.H.JSON(&r, "workspace", "get", id); err != nil {
+	ws, err := e.Host.Workspace(id)
+	if err != nil {
 		return "", "", err
 	}
-	return id, r.Result.Workspace.Label, nil
+	return id, ws.Label, nil
 }
 
 // cmdDivisionNew is run by a Corps's Main Agent from its own pane: spawn a
@@ -1016,14 +1008,12 @@ func cmdDivisionNew(e *Env, args []string, io IO) error {
 	if _, in := e.ReadDivisions()[core.CorpsName(corps)]; in {
 		return die("already inside a Division; spawn from the Corps's own workspace")
 	}
-	// Herdr fills in workspace git metadata lazily, so ask git from a pane's cwd.
-	var panes struct {
-		Result struct{ Panes []struct{ Cwd string } }
-	}
-	if err := e.H.JSON(&panes, "pane", "list", "--workspace", wsID); err != nil || len(panes.Result.Panes) == 0 {
+	// The Host fills in workspace git metadata lazily, so ask git from a pane's cwd.
+	panes, err := e.Host.Panes(wsID)
+	if err != nil || len(panes) == 0 || panes[0].Cwd == nil {
 		return die("no pane in workspace %s", wsID)
 	}
-	out, gerr := exec.Command("git", "-C", panes.Result.Panes[0].Cwd, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	out, gerr := exec.Command("git", "-C", *panes[0].Cwd, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if gerr != nil {
 		return die("Corps '%s' is not a git repository; a new Division needs a worktree", corps)
 	}
@@ -1035,17 +1025,11 @@ func cmdDivisionNew(e *Env, args []string, io IO) error {
 	if ok, _ := e.hasWorkspace(branch); ok {
 		return die("a workspace labelled '%s' already exists; pick another name", branch)
 	}
-	var r struct {
-		Result struct {
-			RootPane struct {
-				PaneID string `json:"pane_id"`
-			} `json:"root_pane"`
-		}
-	}
-	if err := e.H.JSON(&r, "worktree", "create", "--cwd", repo, "--branch", branch, "--label", branch, "--no-focus"); err != nil || r.Result.RootPane.PaneID == "" {
+	created, err := e.Host.CreateWorktree(repo, branch, branch)
+	if err != nil {
 		return die("could not create worktree for branch '%s'", branch)
 	}
-	pane := r.Result.RootPane.PaneID
+	pane := created.PaneID
 	if err := e.SetDivision(branch, &core.Division{Corps: corps, Worktree: true, Model: model, Artifact: artifact}); err != nil {
 		return err
 	}
@@ -1100,7 +1084,7 @@ func cmdDivisionDone(e *Env, args []string, io IO) error {
 	if div == nil {
 		return die("no workspace labelled '%s'", branch)
 	}
-	if _, err := e.H.Run("worktree", "remove", "--workspace", div.ID); err != nil {
+	if err := e.Host.RemoveWorktree(div.ID); err != nil {
 		path := ""
 		if div.Worktree != nil && div.Worktree.CheckoutPath != nil {
 			path = *div.Worktree.CheckoutPath
@@ -1143,16 +1127,17 @@ func cmdDashboard(e *Env, args []string, io IO) error {
 	if err := fs.Parse(args); err != nil {
 		return exitCode(2)
 	}
+	e.ClaudeDir = *claude
 	source := func() ([]byte, error) {
 		var b bytes.Buffer
 		err := encode(&b, e.ArmyView())
 		return b.Bytes(), err
 	}
-	return console.Serve(*addr, source, e.H, e.setBudgetFor, e.profileJSON, e.thawAndTick, e.Broadcast, *claude, *every)
+	return console.Serve(*addr, source, console.Ports{Host: e.Host, Prompt: e.deliver(), Harness: e.harness()}, e.setBudgetFor, e.profileJSON, e.thawAndTick, e.Broadcast, *every)
 }
 
 // cmdPrompt prompts the Agent in a pane and makes sure Claude took it
-// (herdr.Client.PromptAgent): a bare `herdr agent prompt` can leave a draft.
+// (Env.PromptAgent): a bare `herdr agent prompt` can leave a draft.
 // Text "-" is read from stdin, for long or multi-line prompts.
 func cmdPrompt(e *Env, args []string, stdio IO) error {
 	text := ""
@@ -1168,7 +1153,7 @@ func cmdPrompt(e *Env, args []string, stdio IO) error {
 	if strings.TrimSpace(text) == "" {
 		return die(`usage: berthier prompt <pane> "<text>"|-`)
 	}
-	return e.H.PromptAgent(args[0], text)
+	return e.PromptAgent(args[0], text)
 }
 
 // cmdLast prints the final assistant message of the Claude Agent in a pane,
@@ -1178,21 +1163,16 @@ func cmdLast(e *Env, args []string, io IO) error {
 	if len(args) != 1 {
 		return die("usage: berthier last <pane>")
 	}
-	ag, err := console.GetAgent(e.H, args[0])
+	ag, err := console.GetAgent(e.Host, args[0])
 	if err != nil {
 		return err
 	}
 	if ag.Kind != "claude" || ag.Session == "" {
 		return die("%s is not a Claude Agent with a session", args[0])
 	}
-	tr := console.NewTranscripts(e.ClaudeDir)
-	path := tr.Path(ag.Session)
-	if path == "" {
-		return die("no transcript for session %s", ag.Session)
-	}
-	msg, ok := tr.Last(path)
+	msg, ok := e.harness().LastMessage(ag.Session)
 	if !ok {
-		return die("no assistant message yet in %s", path)
+		return die("no assistant message yet for session %s", ag.Session)
 	}
 	if ag.Status == "working" {
 		fmt.Fprintf(io.Err, "(%s is still working; this is its latest message)\n", args[0])

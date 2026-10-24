@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"berthier/internal/core"
+	"berthier/internal/harness"
 	"berthier/internal/herdr"
+	"berthier/internal/host"
 )
 
 // Env is the paths and tunables every command shares.
@@ -25,7 +27,9 @@ type Env struct {
 	SessionWait                                  time.Duration
 	SkipliBin, SkipliEnv                         string
 	BoardPoll, BoardFailAfter                    int64
-	H                                            herdr.Client
+	Host                                         host.Host
+	Harness                                      harness.Harness // nil: Claude Code in ClaudeDir
+	BriefWait                                    time.Duration   // how long a Brief waits for a startup dialog
 	HerdrSession                                 string
 	Interval                                     string // raw, as the loop prints it
 	IntervalSecs                                 float64
@@ -163,7 +167,8 @@ func LoadEnv(getenv func(string) string) Env {
 	// How often prompt_agent checks that Claude took a prompt (seconds).
 	e.PromptPoll = time.Duration(num("BERTHIER_PROMPT_POLL", 0.5) * float64(time.Second))
 	// Claude Code's own directory: live sessions (sessions/<pid>.json) and transcripts.
-	e.H = herdr.FromEnv(getenv, e.PromptPoll)
+	e.Host = herdr.FromEnv(getenv)
+	e.BriefWait = time.Duration(num("BERTHIER_BRIEF_WAIT", 3600) * float64(time.Second))
 	e.ClaudeDir = str("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	// `land` restarts services with this and waits up to LandWait for them to work.
 	e.Systemctl = str("BERTHIER_SYSTEMCTL", "systemctl")

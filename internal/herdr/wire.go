@@ -1,14 +1,8 @@
 package herdr
 
-import (
-	"errors"
+import "berthier/internal/core"
 
-	"berthier/internal/core"
-	"berthier/internal/host"
-)
-
-// ErrUnreachable is Herdr not answering `api snapshot`.
-var ErrUnreachable = errors.New("herdr unreachable")
+// Herdr's wire shapes, mapped to core's.
 
 type wireWorkspace struct {
 	ID       string `json:"workspace_id"`
@@ -29,6 +23,7 @@ type wirePane struct {
 	Cwd          *string `json:"cwd"`
 	Title        *string `json:"terminal_title_stripped"`
 	Name         *string `json:"name"`
+	Label        *string `json:"label"`
 	StateSeq     *int64  `json:"state_change_seq"`
 	AgentSession *struct {
 		Value *string `json:"value"`
@@ -43,66 +38,23 @@ func (w wireWorkspace) core() core.Workspace {
 	return out
 }
 
-func (p wirePane) core() core.SnapAgent {
+// core maps a pane; withLabel names it by its label when it has no agent name.
+func (p wirePane) core(withLabel bool) core.SnapAgent {
 	out := core.SnapAgent{PaneID: p.PaneID, WorkspaceID: p.WorkspaceID, TabID: p.TabID, Agent: p.Agent,
 		Status: p.Status, Cwd: p.Cwd, Title: p.Title, Name: p.Name, StateSeq: p.StateSeq}
+	if out.Name == nil && withLabel {
+		out.Name = p.Label
+	}
 	if p.AgentSession != nil {
 		out.Session = p.AgentSession.Value
 	}
 	return out
 }
 
-func panes(in []wirePane) []core.SnapAgent {
+func panes(in []wirePane, withLabel bool) []core.SnapAgent {
 	var out []core.SnapAgent
 	for _, p := range in {
-		out = append(out, p.core())
+		out = append(out, p.core(withLabel))
 	}
 	return out
-}
-
-// Workspaces is `herdr workspace list`.
-func (c Client) Workspaces() ([]core.Workspace, error) {
-	var r struct {
-		Result struct{ Workspaces []wireWorkspace }
-	}
-	if err := c.JSON(&r, "workspace", "list"); err != nil {
-		return nil, err
-	}
-	var out []core.Workspace
-	for _, w := range r.Result.Workspaces {
-		out = append(out, w.core())
-	}
-	return out, nil
-}
-
-// Snapshot is `herdr api snapshot`.
-func (c Client) Snapshot() (core.Snapshot, error) {
-	var r struct {
-		Result struct {
-			Snapshot *struct {
-				Workspaces []wireWorkspace `json:"workspaces"`
-				Agents     []wirePane      `json:"agents"`
-				Panes      []wirePane      `json:"panes"`
-			}
-		}
-	}
-	if err := c.JSON(&r, "api", "snapshot"); err != nil || r.Result.Snapshot == nil {
-		return core.Snapshot{}, ErrUnreachable
-	}
-	s := core.Snapshot{Agents: panes(r.Result.Snapshot.Agents), Panes: panes(r.Result.Snapshot.Panes)}
-	for _, w := range r.Result.Snapshot.Workspaces {
-		s.Workspaces = append(s.Workspaces, w.core())
-	}
-	return s, nil
-}
-
-// KeyName is Herdr's name for a physical key.
-func KeyName(k host.Key) string {
-	switch k {
-	case host.KeyCtrlC:
-		return "ctrl+c"
-	case host.KeyCtrlU:
-		return "ctrl+u"
-	}
-	return string(k)
 }

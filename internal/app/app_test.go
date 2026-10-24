@@ -11,6 +11,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"berthier/internal/agentsim"
+	"berthier/internal/claude/claudetest"
+	"berthier/internal/host/hosttest"
 )
 
 // sandbox is a BERTHIER_HOME in a temp dir; sh runs a command in it.
@@ -18,10 +22,30 @@ type sandbox struct {
 	t    *testing.T
 	home string
 	env  map[string]string
+	host *hosttest.Fake // the Host, when a test gave one (fakeHost)
+	sim  *agentsim.Sim  // the Agents in it
 }
 
 func newSandbox(t *testing.T) *sandbox {
-	return &sandbox{t, t.TempDir(), map[string]string{"BERTHIER_PROMPT_POLL": "0.001"}}
+	return &sandbox{t: t, home: t.TempDir(), env: map[string]string{"BERTHIER_PROMPT_POLL": "0.001"}}
+}
+
+// inject gives an Env the sandbox's fakes: its Host, and the fake Harness that
+// reads the screens its Agents draw.
+func (s *sandbox) inject(e *Env) {
+	if s.host != nil {
+		e.Host = s.host
+	}
+	if s.sim != nil {
+		e.Harness = claudetest.Fake{Dir: filepath.Join(s.home, "claude")}
+	}
+}
+
+// load is LoadEnv with the sandbox's fakes.
+func (s *sandbox) load() Env {
+	e := LoadEnv(s.getenv)
+	s.inject(&e)
+	return e
 }
 
 func (s *sandbox) getenv(k string) string {
@@ -72,7 +96,7 @@ func (s *sandbox) ledger(ts float64, session string, week float64, resets ...flo
 // sh runs a command; the result is stdout and stderr, then the exit status.
 func (s *sandbox) sh(stdin string, args ...string) (stdout, stderr string, code int) {
 	var out, errb bytes.Buffer
-	code = Run(args, IO{strings.NewReader(stdin), &out, &errb}, s.getenv)
+	code = RunWith(args, IO{strings.NewReader(stdin), &out, &errb}, s.getenv, s.inject)
 	return out.String(), errb.String(), code
 }
 
@@ -249,7 +273,7 @@ func TestBaselineOnlyAndFiveHour(t *testing.T) {
 	eq(t, "baseline-only view in army", jq(t, army, "budget.week_pct")+jq(t, army, "budget.corps"), "73[]")
 
 	f := t.TempDir()
-	s2 := &sandbox{t, f, s.env}
+	s2 := &sandbox{t: t, home: f, env: s.env}
 	s2.write("state.json", `{"agents": {}}`)
 	five := `{"session_id": "f1", "cwd": "/r/dot", "cost": {"total_cost_usd": 1}, "rate_limits": {"seven_day": {"used_percentage": 5, "resets_at": 1800000000}, "five_hour": {"used_percentage": 31, "resets_at": 1799990000}}}`
 	s2.sh(five, "sample")
@@ -333,7 +357,7 @@ func TestReportAskHookLog(t *testing.T) {
 	// A backgrounded fork's Report is also filed under the session it was
 	// forked from (an ancestor process), which is the one Herdr and the Grand
 	// Army State know.
-	e := LoadEnv(s.getenv)
+	e := s.load()
 	os.MkdirAll(filepath.Join(e.ClaudeDir, "sessions"), 0o755)
 	sessionFile := func(pid int, sid, kind string) {
 		os.WriteFile(filepath.Join(e.ClaudeDir, "sessions", fmt.Sprint(pid)+".json"), []byte(fmt.Sprintf(`{"pid": %d, "sessionId": %q, "kind": %q}`, pid, sid, kind)), 0o644)
@@ -372,7 +396,7 @@ func TestReportAskHookLog(t *testing.T) {
 	// --- ask
 	delete(s.env, "HERDR_PANE_ID")
 	_, errs, _ := s.sh("", "ask", "skipli", "hi")
-	eq(t, "ask needs a pane", errs, "berthier: run this from an Agent's Herdr pane (no HERDR_PANE_ID)\n")
+	eq(t, "ask needs a pane", errs, "berthier: run this from an Agent's pane in the Host (not in one)\n")
 	s.env["HERDR_PANE_ID"] = "a:p1"
 	_, errs, _ = s.sh("", "ask", "old", "hi")
 	eq(t, "ask unknown corps", errs, "berthier: no Corps 'old'; known: berthier dotfiles skipli \n")
@@ -439,14 +463,14 @@ func TestLoopOutageAndLog(t *testing.T) {
 	s.write("loop.log", "2026-10-17T13:02:57+07:00 loop started (interval 10s, session default)\n")
 	s.env["BERTHIER_INTERVAL"] = "0.05"
 	s.env["BERTHIER_HERDR"] = "/nonexistent/herdr"
-	e := LoadEnv(s.getenv)
+	e := s.load()
 	go e.Loop() // killed with the test binary; stopping needs a signal
 	time.Sleep(400 * time.Millisecond)
 	errors := 0
 	for _, l := range strings.Split(s.read("loop.log"), "\n") {
 		if jq0(l, "kind") == "loop_error" {
 			errors++
-			eq(t, "outage reason", jq0(l, "why"), "herdr unreachable")
+			eq(t, "outage reason", jq0(l, "why"), "host unreachable")
 		}
 	}
 	eq(t, "outage logged once", errors, 1)

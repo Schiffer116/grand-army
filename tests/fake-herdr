@@ -1,49 +1,7 @@
 #!/usr/bin/env bash
-# A Herdr with one Claude Agent, for prompt_agent/start_claude, the Console's
-# PromptAgent and the unit smoke test (an empty snapshot). State lives next to
-# this script: `mode` says how Claude takes a prompt, `calls` logs each
-# command, `text` the last prompt.
-#   takes  submits at once         draft  holds it until Enter (image paths)
-#   lost   drops the first paste   busy   working: queues it, no state change
-#   never  holds it whatever       error  Herdr refuses it
-#   typing   the user's draft sits in the box
-#   nostart  Herdr refuses to start Claude
-#   dialog   Claude starts behind a dialog the user answers; then takes
-# A `/clear` prompt starts a new session (file `sid`) unless the mode is noclear.
-# A file `shell` puts the pane at a shell prompt (process-info).
-d=$(dirname "$0")
-mode=$(cat "$d/mode") seq=$(cat "$d/seq" 2>/dev/null || echo 1)
-printf '%s\n' "${*//$'\n'/ }" >>"$d/calls"
+# A Herdr with an empty Grand Army: it answers `api snapshot` and nothing else.
+# It stands in for Herdr in TestSystemdUnitsStart only (every unit's ExecStart
+# starts against it); everything else is tested on the Host fakes (hosttest).
 [[ $1 == --session ]] && shift 2
-bump() { echo $((seq + 1)) >"$d/seq"; }
-case "$1 $2" in
-  "agent get")
-    [[ $mode != nostart ]] || { echo '{"error":{"code":"agent_not_found","message":"agent target p1 not found"}}' >&2; exit 1; }
-    status=idle
-    [[ $mode == dialog && ! -e $d/answered ]] && status=blocked
-    [[ $mode == busy ]] && status=working
-    echo "{\"result\":{\"agent\":{\"state_change_seq\":$seq,\"agent_status\":\"$status\",\"agent_session\":{\"value\":\"$(cat "$d/sid" 2>/dev/null || echo s1)\"}}}}" ;;
-  "agent start")
-    [[ $mode != dialog ]] || { echo '{"error":{"code":"agent_not_ready","message":"blocked"}}' >&2; exit 1; }
-    [[ $mode != nostart ]] || { echo '{"error":{"code":"invalid_agent_argument","message":"agent arguments cannot be encoded safely for the target shell"}}' >&2; exit 1; } ;;
-  "agent prompt")
-    printf '%s' "$4" >"$d/text"
-    if [[ $4 == /clear ]]; then
-      [[ $mode == noclear ]] || { echo s2 >"$d/sid"; bump; }
-      exit 0
-    fi
-    case $mode in
-      error) echo '{"error":{"code":"agent_not_found","message":"agent target x not found"}}' >&2; exit 1 ;;
-      takes | dialog) bump ;;
-      draft | never) printf '%s' "$4" >"$d/box" ;;
-      lost) (($(grep -c '^agent prompt' "$d/calls") > 1)) && bump ;;
-    esac ;;
-  "api snapshot") echo '{"result":{"snapshot":{"workspaces":[],"agents":[],"panes":[]}}}' ;;
-  "agent wait") touch "$d/answered" ;;
-  "pane process-info") [[ -e $d/shell ]] && echo '{"result":{"process_info":{"foreground_processes":[{"name":"zsh"}]}}}' ;;
-  "agent send-keys") [[ $mode == draft ]] && { rm -f "$d/box"; bump; } ;;
-  "pane read")
-    [[ $mode == typing ]] && echo 'half a thought' >"$d/box"
-    printf '%s\n' "────────────" "❯ $(cat "$d/box" 2>/dev/null)" "────────────" "  5h: 1%" ;;
-esac
+[[ "$1 $2" == "api snapshot" ]] && echo '{"result":{"snapshot":{"workspaces":[],"agents":[],"panes":[]}}}'
 exit 0

@@ -104,8 +104,10 @@ type Host interface {
 	Pane(id string) (core.SnapAgent, error)
 	// Read returns the pane's terminal text, as ReadOpts says.
 	Read(pane string, o ReadOpts) (string, error)
-	// Type puts text into the pane's input as typed, without pressing Enter.
-	// Text may hold newlines.
+	// Type puts text into the pane's input as one paste, without pressing
+	// Enter: newlines do not submit, and the program in the pane treats it as
+	// pasted (Claude turns pasted image paths into attachments). Text may hold
+	// newlines.
 	Type(pane, text string) error
 	// Key presses a physical key in the pane.
 	Key(pane string, k Key) error

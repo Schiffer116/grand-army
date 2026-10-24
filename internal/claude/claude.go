@@ -5,6 +5,7 @@ package claude
 
 import (
 	"path/filepath"
+	"sync"
 	"time"
 
 	"berthier/internal/core"
@@ -87,3 +88,36 @@ func (Claude) Interrupted(lines []string) bool           { return TranscriptInte
 func (Claude) CacheOf(lines []string) (core.Cache, bool) { return CacheOf(lines) }
 
 func trimExt(name string) string { return name[:len(name)-len(filepath.Ext(name))] }
+
+// chats keeps one incremental chat reader per Claude directory, so a poll reads
+// only the lines appended since the last.
+var chats sync.Map
+
+func (c Claude) transcripts() *Transcripts {
+	v, _ := chats.LoadOrStore(c.ConfigDir, NewTranscripts(c.ConfigDir))
+	return v.(*Transcripts)
+}
+
+func (c Claude) Chat(session string) (harness.Chat, bool) {
+	t := c.transcripts()
+	path := t.Path(session)
+	if path == "" {
+		return harness.Chat{}, false
+	}
+	items, rev, err := t.Read(path)
+	if err != nil {
+		return harness.Chat{}, false
+	}
+	return harness.Chat{Session: trimExt(filepath.Base(path)), Rev: rev, Items: items, Info: t.Info(path)}, true
+}
+
+func (c Claude) LastMessage(session string) (harness.ChatItem, bool) {
+	t := c.transcripts()
+	path := t.Path(session)
+	if path == "" {
+		return harness.ChatItem{}, false
+	}
+	return t.Last(path)
+}
+
+func (c Claude) Skills(cwd string) []harness.Skill { return Skills(c.ConfigDir, cwd) }

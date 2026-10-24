@@ -135,12 +135,14 @@ func filterGit(env []string) []string {
 }
 
 func worktrees(t *testing.T, h host.Host) {
-	repo, err := filepath.EvalSymlinks(t.TempDir())
+	// A Host may put checkouts under a directory named after the repo, so the
+	// name is unique to this run.
+	repo, err := os.MkdirTemp("", "hosttest-repo-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo = filepath.Join(repo, "repo")
-	if err := os.Mkdir(repo, 0o755); err != nil {
+	t.Cleanup(func() { os.RemoveAll(repo) })
+	if repo, err = filepath.EvalSymlinks(repo); err != nil {
 		t.Fatal(err)
 	}
 	git(t, repo, "init", "-q")
@@ -237,8 +239,9 @@ func panes(t *testing.T, h host.Host) {
 	if err := h.Key(pane, host.KeyEnter); err != nil {
 		t.Fatal(err)
 	}
+	// The command line and its output: twice.
 	eventually(t, "the command's output", func() bool {
-		return strings.Contains(screen(h, pane, host.ReadOpts{Recent: 50}), "marker-two")
+		return strings.Count(screen(h, pane, host.ReadOpts{Recent: 50}), "marker-two") >= 2
 	})
 	if _, err := h.Read(pane, host.ReadOpts{ANSI: true}); err != nil {
 		t.Errorf("Read with ANSI: %v", err)

@@ -18,13 +18,13 @@ import (
 	"mime"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"berthier/internal/herdr"
+	"berthier/internal/harness"
+	"berthier/internal/host"
 )
 
 //go:embed index.html
@@ -162,48 +162,37 @@ func (a *Army) Panes() map[string]bool {
 	return panes
 }
 
-// unscrolledLines caps a read of pane at want lines to what its screen and
-// host scrollback hold: asked for more, Herdr scrolls an idle alt-screen
-// Agent's view up and back to collect its history, and the user sees it jump.
-func unscrolledLines(h herdr.Client, pane string, want int) int {
-	var got struct {
-		Result struct {
-			Pane struct {
-				Scroll struct {
-					Rows int `json:"viewport_rows"`
-					Back int `json:"max_offset_from_bottom"`
-				}
-			}
-		}
-	}
-	out, err := h.Command("pane", "get", pane).Output()
-	if err != nil || json.Unmarshal(out, &got) != nil || got.Result.Pane.Scroll.Rows == 0 {
-		return want
-	}
-	return min(want, got.Result.Pane.Scroll.Rows+got.Result.Pane.Scroll.Back)
+// Prompter delivers a prompt to an Agent and makes sure it took it
+// (deliver.Delivery).
+type Prompter interface {
+	Prompt(pane, text string) error
 }
 
-// Agent is what Herdr says about the Agent in a pane.
+// Ports is what the Console reaches the Grand Army through: the Host for
+// reading panes, and the delivery of prompts.
+type Ports struct {
+	Host    host.Host
+	Prompt  Prompter
+	Harness harness.Harness
+}
+
+// Agent is what the Host says about the Agent in a pane.
 type Agent struct{ Kind, Status, Session string }
 
-// GetAgent is `herdr agent get <pane>`.
-func GetAgent(h herdr.Client, pane string) (Agent, error) {
-	var got struct {
-		Result struct {
-			Agent struct {
-				Agent        string `json:"agent"`
-				AgentStatus  string `json:"agent_status"`
-				AgentSession struct {
-					Value string `json:"value"`
-				} `json:"agent_session"`
-			} `json:"agent"`
-		} `json:"result"`
+// GetAgent is the Agent in pane, as the Host lists it.
+func GetAgent(h host.Host, pane string) (Agent, error) {
+	p, err := h.Pane(pane)
+	if err != nil {
+		return Agent{}, fmt.Errorf("host pane: %v", err)
 	}
-	if err := h.JSON(&got, "agent", "get", pane); err != nil {
-		return Agent{}, fmt.Errorf("herdr agent get: %v", err)
+	ag := Agent{Status: p.Status}
+	if p.Agent != nil {
+		ag.Kind = *p.Agent
 	}
-	ag := got.Result.Agent
-	return Agent{ag.Agent, ag.AgentStatus, ag.AgentSession.Value}, nil
+	if p.Session != nil {
+		ag.Session = *p.Session
+	}
+	return ag, nil
 }
 
 // ProfileSource is the Profile view (`berthier profile`) as JSON: a quota
@@ -211,12 +200,12 @@ func GetAgent(h herdr.Client, pane string) (Agent, error) {
 type ProfileSource func(weeksAgo int, session string) ([]byte, error)
 
 // Handler serves the Console without a Profile.
-func Handler(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcripts) http.Handler {
-	return HandlerWith(a, h, setBudget, tr, nil, nil, nil)
+func Handler(a *Army, p Ports, setBudget BudgetSetter) http.Handler {
+	return HandlerWith(a, p, setBudget, nil, nil, nil)
 }
 
 // HandlerWith serves the Console; profile feeds its Profile view.
-func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcripts, profile ProfileSource, thaw Thawer, broadcast Broadcaster) http.Handler {
+func HandlerWith(a *Army, p Ports, setBudget BudgetSetter, profile ProfileSource, thaw Thawer, broadcast Broadcaster) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -273,7 +262,7 @@ func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcript
 			http.Error(w, "no such agent: "+req.Pane, http.StatusNotFound)
 			return
 		}
-		if err := h.PromptAgent(req.Pane, req.Text); err != nil {
+		if err := p.Prompt.Prompt(req.Pane, req.Text); err != nil {
 			log.Printf("prompt %s: %v", req.Pane, err)
 			http.Error(w, "prompt: "+err.Error(), http.StatusBadGateway)
 			return
@@ -373,7 +362,7 @@ func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcript
 			http.Error(w, "no such agent: "+pane, http.StatusNotFound)
 			return
 		}
-		ag, err := GetAgent(h, pane)
+		ag, err := GetAgent(p.Host, pane)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -381,22 +370,20 @@ func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcript
 		res := map[string]any{"status": ag.Status, "kind": ag.Kind}
 		// A Claude Code Agent shows its transcript; anything else, its terminal.
 		if ag.Kind == "claude" && ag.Session != "" {
-			if path := tr.Path(ag.Session); path != "" {
-				if items, rev, err := tr.Read(path); err == nil {
-					res["source"], res["session"], res["rev"], res["items"] = "transcript", strings.TrimSuffix(filepath.Base(path), ".jsonl"), rev, items
-					res["info"] = tr.Info(path)
-				}
+			if chat, ok := p.Harness.Chat(ag.Session); ok {
+				res["source"], res["session"], res["rev"], res["items"] = "transcript", chat.Session, chat.Rev, chat.Items
+				res["info"] = chat.Info
 			}
 		}
 		if res["source"] == nil {
-			text, err := h.Command("agent", "read", pane, "--source", "recent-unwrapped", "--lines", strconv.Itoa(unscrolledLines(h, pane, 200))).Output()
+			text, err := p.Host.Read(pane, host.ReadOpts{Recent: 200})
 			if err != nil {
-				http.Error(w, fmt.Sprintf("herdr agent read: %v", err), http.StatusBadGateway)
+				http.Error(w, fmt.Sprintf("pane read: %v", err), http.StatusBadGateway)
 				return
 			}
 			h := fnv.New64a()
-			h.Write(text)
-			res["source"], res["rev"], res["text"] = "terminal", h.Sum64()>>1, string(text)
+			h.Write([]byte(text))
+			res["source"], res["rev"], res["text"] = "terminal", h.Sum64()>>1, text
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)
@@ -407,22 +394,12 @@ func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcript
 			http.Error(w, "no such agent: "+pane, http.StatusNotFound)
 			return
 		}
-		var got struct {
-			Result struct {
-				Agent struct {
-					Cwd string `json:"cwd"`
-				} `json:"agent"`
-			} `json:"result"`
-		}
-		if out, err := h.Command("agent", "get", pane).Output(); err == nil {
-			json.Unmarshal(out, &got)
-		}
-		claudeDir := ""
-		if tr != nil {
-			claudeDir = tr.dir
+		cwd := ""
+		if ag, err := p.Host.Pane(pane); err == nil && ag.Cwd != nil {
+			cwd = *ag.Cwd
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"skills": Skills(claudeDir, got.Result.Agent.Cwd)})
+		json.NewEncoder(w).Encode(map[string]any{"skills": p.Harness.Skills(cwd)})
 	})
 	mux.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
@@ -459,7 +436,7 @@ func HandlerWith(a *Army, h herdr.Client, setBudget BudgetSetter, tr *Transcript
 }
 
 // Serve runs the Console on addr until it fails.
-func Serve(addr string, source func() ([]byte, error), h herdr.Client, setBudget BudgetSetter, profile ProfileSource, thaw Thawer, broadcast Broadcaster, claudeDir string, every time.Duration) error {
+func Serve(addr string, source func() ([]byte, error), p Ports, setBudget BudgetSetter, profile ProfileSource, thaw Thawer, broadcast Broadcaster, every time.Duration) error {
 	a := NewArmy()
 	go Poll(context.Background(), a, source, every)
 	l, err := net.Listen("tcp", addr)
@@ -468,5 +445,5 @@ func Serve(addr string, source func() ([]byte, error), h herdr.Client, setBudget
 	}
 	// The bound address, so -addr 127.0.0.1:0 says which port it got.
 	log.Printf("serving the Grand Army console on http://%s", l.Addr())
-	return http.Serve(l, HandlerWith(a, h, setBudget, NewTranscripts(claudeDir), profile, thaw, broadcast))
+	return http.Serve(l, HandlerWith(a, p, setBudget, profile, thaw, broadcast))
 }

@@ -1,7 +1,6 @@
 package console
 
 import (
-	"berthier/internal/herdr"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -32,7 +31,7 @@ func get(t *testing.T, url string) (*http.Response, []byte) {
 // The page links a manifest whose icons are all served at their stated size,
 // and every file the service worker keeps exists.
 func TestInstallable(t *testing.T) {
-	srv := httptest.NewServer(Handler(NewArmy(), herdr.Client{}, nil, nil))
+	srv := httptest.NewServer(Handler(NewArmy(), Ports{}, nil))
 	defer srv.Close()
 
 	_, page := get(t, srv.URL+"/")
@@ -133,7 +132,7 @@ func TestIconDrawsEagle(t *testing.T) {
 func TestThemeServedFromPalette(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "palette.css")
 	t.Setenv("BERTHIER_THEME", path)
-	srv := httptest.NewServer(Handler(NewArmy(), herdr.Client{}, nil, nil))
+	srv := httptest.NewServer(Handler(NewArmy(), Ports{}, nil))
 	defer srv.Close()
 
 	res, css := get(t, srv.URL+"/theme.css")

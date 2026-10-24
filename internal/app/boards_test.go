@@ -49,12 +49,12 @@ func (s *sandbox) clearInbox() {
 
 func TestBoards(t *testing.T) {
 	s := newSandbox(t)
-	hd := fakeHerdr(t, s)
-	s.mode(hd, "takes")
+	berthier := fakeHost(t, s, "takes")
+	s.sim.Attach(berthier)
 	sk := fakeSkipli(t, s)
-	e := LoadEnv(s.getenv)
-	out := core.TickOut{State: core.State{Berthier: ptrTo("b:p1")}}
-	prompts := func() int { return strings.Count(calls(hd), "agent prompt") }
+	e := s.load()
+	out := core.TickOut{State: core.State{Berthier: ptrTo(berthier)}}
+	prompts := func() int { return len(s.host.CallsTo("Type")) }
 
 	// --- adopt an existing board; a Corps without one gets a card on the Grand Army Board, created once
 	appendLine(t, filepath.Join(sk, "boards"), "own1|Skipli")
@@ -114,7 +114,7 @@ board|skipli|[board] new task t-ui1 "dark mode" on Skipli`)
 	s.clearInbox()
 	e.pollBoards(out)
 	eq(t, "suggestion once", prompts(), 1)
-	if txt := readFile(filepath.Join(hd, "text")); !strings.Contains(txt, "dotfiles") || !strings.Contains(txt, "own Board") {
+	if txt := s.sim.Took(berthier); !strings.Contains(txt, "dotfiles") || !strings.Contains(txt, "own Board") {
 		t.Errorf("suggestion text: %q", txt)
 	}
 	e.pollBoards(out)
@@ -127,7 +127,7 @@ board|skipli|[board] new task t-ui1 "dark mode" on Skipli`)
 	e.pollBoards(out)
 	e.pollBoards(out)
 	eq(t, "session alert once", prompts(), 2)
-	if txt := readFile(filepath.Join(hd, "text")); !strings.Contains(txt, "Session") || !strings.Contains(txt, "never run login") {
+	if txt := s.sim.Took(berthier); !strings.Contains(txt, "Session") || !strings.Contains(txt, "never run login") {
 		t.Errorf("session text: %q", txt)
 	}
 	os.Remove(filepath.Join(sk, "expired"))
@@ -162,7 +162,7 @@ board|skipli|[board] new task t-ui1 "dark mode" on Skipli`)
 		e.pollBoards(out)
 	}
 	eq(t, "escalated once after 5 minutes", prompts(), 4)
-	if txt := readFile(filepath.Join(hd, "text")); !strings.Contains(txt, "not read for 5m") || !strings.Contains(txt, "exec: not found") {
+	if txt := s.sim.Took(berthier); !strings.Contains(txt, "not read for 5m") || !strings.Contains(txt, "exec: not found") {
 		t.Errorf("error text: %q", txt)
 	}
 	os.Remove(filepath.Join(sk, "broken"))
@@ -185,9 +185,8 @@ board|skipli|[board] new task t-ui1 "dark mode" on Skipli`)
 
 func TestBoardAdoptSeedsSilently(t *testing.T) {
 	s := newSandbox(t)
-	fakeHerdr(t, s)
 	sk := fakeSkipli(t, s)
-	e := LoadEnv(s.getenv)
+	e := s.load()
 	appendLine(t, filepath.Join(sk, "boards"), "own1|Skipli")
 	appendLine(t, filepath.Join(sk, "cards"), "own1|c1|UI")
 	appendLine(t, filepath.Join(sk, "tasks"), "c1|t1|one|pending")
@@ -201,7 +200,6 @@ func TestBoardAdoptSeedsSilently(t *testing.T) {
 
 func TestBoardCommand(t *testing.T) {
 	s := newSandbox(t)
-	fakeHerdr(t, s)
 	fakeSkipli(t, s)
 	for _, c := range []struct {
 		args []string

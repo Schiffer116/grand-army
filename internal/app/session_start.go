@@ -48,20 +48,18 @@ func cmdSessionStart(e *Env, args []string, io IO) error {
 // sessionCorps is the Corps whose Main Agent runs in this pane's workspace, or ""
 // for a Division or no workspace of the Army.
 func (e *Env) sessionCorps() string {
-	id := e.getenv("HERDR_WORKSPACE_ID")
+	id := e.selfWorkspace()
 	if id == "" {
 		return ""
 	}
-	var r struct {
-		Result struct{ Workspace struct{ Label string } }
-	}
-	if e.H.JSON(&r, "workspace", "get", id) != nil || r.Result.Workspace.Label == "" {
+	ws, err := e.Host.Workspace(id)
+	if err != nil || ws.Label == "" {
 		return ""
 	}
-	if e.ReadDivisions().IsDivision(r.Result.Workspace.Label) {
+	if e.ReadDivisions().IsDivision(ws.Label) {
 		return ""
 	}
-	return core.CorpsName(r.Result.Workspace.Label)
+	return core.CorpsName(ws.Label)
 }
 
 // notesForSession reads a Corps's Notes for the session, as `berthier notes`

@@ -7,37 +7,46 @@ import (
 	"testing"
 
 	"berthier/internal/core"
+	"berthier/internal/host"
+	"berthier/internal/host/hosttest"
 )
 
 func TestFreshStart(t *testing.T) {
 	s := newSandbox(t)
-	dir := fakeHerdr(t, s)
-	e := LoadEnv(s.getenv)
-	s.write("reports/old.json", `{"line":"halfway through the parser","pane":"p1","at":1}`)
+	pane := fakeHost(t, s, "takes")
+	e := s.load()
+	s.write("reports/old.json", `{"line":"halfway through the parser","pane":"`+pane+`","at":1}`)
 	if err := e.saveBrief("dark-mode", "Build dark mode."); err != nil {
 		t.Fatal(err)
 	}
-	f := core.FreshStart{PaneID: "p1", Name: "skipli-dark-mode", Session: "old", Model: "claude-sonnet-5-5", Division: "dark-mode", Live: true, Ev: core.Fields{"pane": "p1"}}
+	f := core.FreshStart{PaneID: pane, Name: "skipli-dark-mode", Session: "old", Model: "claude-sonnet-5-5", Division: "dark-mode", Live: true, Ev: core.Fields{"pane": pane}}
 
-	s.mode(dir, "takes")
-	os.WriteFile(filepath.Join(dir, "shell"), nil, 0o644)
 	e.freshStart(f)
-	eq(t, "a live Claude is ended, then a new session started and prompted", calls(dir), "pane send-keys,pane send-keys,pane process-info,pane process-info,agent start,pane read,agent prompt")
-	raw, _ := os.ReadFile(filepath.Join(dir, "calls"))
-	eq(t, "same model", strings.Contains(string(raw), "agent start skipli-dark-mode --kind claude --pane p1 --timeout 45000 -- --model claude-sonnet-5-5"), true)
-	eq(t, "prompt", readFile(filepath.Join(dir, "text")), core.FreshPrompt("halfway through the parser", "Build dark mode."))
+	keys := 0
+	for _, c := range s.host.CallsTo("Key") {
+		if c.Args[1] == "ctrl-c" {
+			keys++
+		}
+	}
+	eq(t, "a live Claude is ended (two Ctrl-C)", keys, 2)
+	eq(t, "then a new session on the same model", startArgs(s), "fake-agent --model claude-sonnet-5-5")
+	eq(t, "named", s.host.CallsTo("RenamePane")[0].String(), "RenamePane "+pane+" skipli-dark-mode")
+	eq(t, "prompt", s.sim.Took(pane), core.FreshPrompt("halfway through the parser", "Build dark mode."))
 	eq(t, "logged", strings.Contains(s.read("loop.log"), `"kind":"fresh_started"`), true)
 
-	s.mode(dir, "takes")
-	os.Remove(filepath.Join(dir, "shell"))
-	f.Live = false
+	// Not at a shell: failed, the user told.
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "takes")
+	s.host.Update(pane, func(p *hosttest.Pane) { p.Proc = host.Process{Name: "claude"} })
+	e = s.load()
+	f.PaneID, f.Live = pane, false
 	e.freshStart(f)
-	eq(t, "no shell: failed, the user told", []any{calls(dir), strings.Contains(s.read("loop.log"), `"kind":"fresh_failed"`)}, "[pane process-info,notification show true]")
+	eq(t, "no shell: failed, the user told", []any{len(s.host.CallsTo("Start")), len(s.host.Notifications()), strings.Contains(s.read("loop.log"), `"kind":"fresh_failed"`)}, "[0 1 true]")
 }
 
 func TestThawRequests(t *testing.T) {
 	s := newSandbox(t)
-	e := LoadEnv(s.getenv)
+	e := s.load()
 	s.write("state.json", `{"agents":{"w1:p1":{"status":"gone","workspace_id":"w1","frozen":{"since":1,"why":"crash","last_at":0,"context":90000}},"w1:p2":{"status":"idle","workspace_id":"w1"}}}`)
 	if err := e.Thaw("w1:p2", "revive"); err == nil || !strings.Contains(err.Error(), "not a Frozen Agent") {
 		t.Errorf("thawing an Agent not Frozen: %v", err)
@@ -55,30 +64,39 @@ func TestThawRequests(t *testing.T) {
 
 func TestWake(t *testing.T) {
 	s := newSandbox(t)
-	dir := fakeHerdr(t, s)
-	e := LoadEnv(s.getenv)
-	s.write("state.json", `{"agents":{"p1":{"status":"idle","name":"skipli-dark-mode","session_id":"old","workspace_label":"skipli-dark-mode"}}}`)
-	s.write("reports/old.json", `{"line":"halfway through the parser","pane":"p1","at":1}`)
+	pane := fakeHost(t, s, "takes")
+	s.sim.Attach(pane)
+	e := s.load()
+	s.write("state.json", `{"agents":{"`+pane+`":{"status":"idle","name":"skipli-dark-mode","session_id":"old","workspace_label":"skipli-dark-mode"}}}`)
+	s.write("reports/old.json", `{"line":"halfway through the parser","pane":"`+pane+`","at":1}`)
 	if err := e.saveBrief("skipli-dark-mode", "Build dark mode."); err != nil {
 		t.Fatal(err)
 	}
 	s.write("inbox/w1.json", `{}`)
-	d := core.Delivery{ID: "w1", PaneID: "p1", From: "service", To: "skipli-dark-mode", Text: "[berthier wake] up", Wake: true, Ev: core.Fields{"pane": "p1"}}
+	d := core.Delivery{ID: "w1", PaneID: pane, From: "service", To: "skipli-dark-mode", Text: "[berthier wake] up", Wake: true, Ev: core.Fields{"pane": pane}}
 
-	s.mode(dir, "takes")
 	e.wake(d)
-	eq(t, "clear, then rename, then prompt", calls(dir), "pane read,agent prompt,agent rename,pane read,agent prompt")
-	eq(t, "self-sufficient prompt", readFile(filepath.Join(dir, "text")), "[berthier wake] up"+core.Rebuild("halfway through the parser", "Build dark mode."))
+	eq(t, "clear, then rename, then prompt", hostCalls(s), "Read,Type,Key,RenamePane,Read,Type,Key")
+	eq(t, "self-sufficient prompt", s.sim.Took(pane), "[berthier wake] up"+core.Rebuild("halfway through the parser", "Build dark mode."))
 	_, err := os.Stat(filepath.Join(e.Inbox, "w1.json"))
 	eq(t, "delivered and dequeued", []any{os.IsNotExist(err), strings.Contains(s.read("loop.log"), `"kind":"delivered"`)}, "[true true]")
 
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "noclear")
+	s.sim.Attach(pane)
+	e = s.load()
+	s.write("state.json", `{"agents":{"`+pane+`":{"status":"idle","name":"skipli-dark-mode","session_id":"old","workspace_label":"skipli-dark-mode"}}}`)
 	s.write("inbox/w1.json", `{}`)
-	s.mode(dir, "noclear")
+	d.PaneID = pane
 	e.wake(d)
 	_, err = os.Stat(filepath.Join(e.Inbox, "w1.json"))
-	eq(t, "unconfirmed clear: nothing more sent, retried", []any{strings.Contains(calls(dir), "agent rename"), readFile(filepath.Join(dir, "text")), err == nil, strings.Contains(s.read("loop.log"), `"kind":"wake_clear_failed"`)}, "[false /clear true true]")
+	eq(t, "unconfirmed clear: nothing more sent, retried", []any{len(s.host.CallsTo("RenamePane")), s.sim.Took(pane), err == nil, strings.Contains(s.read("loop.log"), `"kind":"wake_clear_failed"`)}, "[0 /clear true true]")
 
-	s.mode(dir, "typing")
+	s = newSandbox(t)
+	pane = fakeHost(t, s, "typing")
+	s.sim.Attach(pane)
+	e = s.load()
+	d.PaneID = pane
 	e.wake(d)
-	eq(t, "a draft blocks the clear", strings.Contains(calls(dir), "agent prompt"), false)
+	eq(t, "a draft blocks the clear", len(s.host.CallsTo("Type")), 0)
 }

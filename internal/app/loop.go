@@ -64,8 +64,8 @@ func (e *Env) safeTick() (why string) {
 	switch err := e.Tick(); {
 	case err == nil:
 		return ""
-	case err == ErrHerdrUnreachable:
-		return "herdr unreachable"
+	case err == ErrHostUnreachable:
+		return "host unreachable"
 	default:
 		return "tick failed (exit 1)"
 	}

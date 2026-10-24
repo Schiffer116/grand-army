@@ -72,6 +72,12 @@ loop                                run the Main Loop forever
 
 // Run runs one berthier command and returns its exit status.
 func Run(args []string, io IO, getenv func(string) string) int {
+	return RunWith(args, io, getenv, nil)
+}
+
+// RunWith is Run with a chance to change the Env a command runs on (tests
+// give it fakes of the Host and Harness ports).
+func RunWith(args []string, io IO, getenv func(string) string, setup func(*Env)) int {
 	if len(args) == 0 {
 		fmt.Fprint(io.Err, usageText)
 		return 2
@@ -93,6 +99,9 @@ func Run(args []string, io IO, getenv func(string) string) int {
 		return 2
 	}
 	e := LoadEnv(getenv)
+	if setup != nil {
+		setup(&e)
+	}
 	err := run(&e, args, io)
 	switch x := err.(type) {
 	case nil:
@@ -103,7 +112,7 @@ func Run(args []string, io IO, getenv func(string) string) int {
 		fmt.Fprintf(io.Err, "berthier: %s\n", x.Msg)
 		return 1
 	}
-	if err == ErrHerdrUnreachable {
+	if err == ErrHostUnreachable {
 		return 3
 	}
 	fmt.Fprintf(io.Err, "berthier: %s\n", err)

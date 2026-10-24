@@ -25,9 +25,12 @@ import (
 	"berthier/internal/host"
 )
 
-// Fake is an in-memory Harness. Dir is where its transcripts live.
+// Fake is an in-memory Harness. Dir is where its transcripts live; Chats and
+// SkillList are what it answers Chat and Skills with.
 type Fake struct {
-	Dir string
+	Dir       string
+	Chats     map[string]harness.Chat
+	SkillList []harness.Skill
 }
 
 var _ harness.Harness = Fake{}
@@ -196,3 +199,20 @@ func (Fake) CacheOf(lines []string) (core.Cache, bool) {
 	}
 	return core.Cache{}, false
 }
+
+func (f Fake) Chat(session string) (harness.Chat, bool) {
+	c, ok := f.Chats[session]
+	return c, ok
+}
+
+func (f Fake) LastMessage(session string) (harness.ChatItem, bool) {
+	c, ok := f.Chats[session]
+	for i := len(c.Items) - 1; ok && i >= 0; i-- {
+		if c.Items[i].Role == "assistant" {
+			return c.Items[i], true
+		}
+	}
+	return harness.ChatItem{}, false
+}
+
+func (f Fake) Skills(cwd string) []harness.Skill { return f.SkillList }

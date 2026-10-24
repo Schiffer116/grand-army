@@ -99,7 +99,7 @@ func (e *Env) notesReader() string {
 	if sid := e.getenv("CLAUDE_CODE_SESSION_ID"); sid != "" {
 		return sid
 	}
-	if pane := e.getenv("HERDR_PANE_ID"); pane != "" {
+	if pane := e.selfPane(); pane != "" {
 		return "pane:" + pane
 	}
 	return "terminal"
@@ -134,7 +134,7 @@ func (e *Env) lastRead(corps string) (string, bool) {
 // callerCorps is the Corps of the Agent running a command: its own, or for a
 // Division the Corps it belongs to (Berthier's is its workspace's).
 func (e *Env) callerCorps() (string, error) {
-	pane := e.getenv("HERDR_PANE_ID")
+	pane := e.selfPane()
 	if pane == "" {
 		return "", die("name the Corps (not run from an Agent's Herdr pane)")
 	}

@@ -44,10 +44,14 @@ type Fake struct {
 	// interrupt kills it. Without it Start only records the call and the pane's
 	// foreground becomes the process until a test or an interrupt ends it.
 	Exec bool
+	// Fail, when set, makes a call fail with the error it returns for the
+	// method's name (nil: the call goes ahead).
+	Fail func(method string) error
 	// OnType and OnKey run after the default effect, without the lock held,
 	// so a test can play the program in a pane.
-	OnType func(pane, text string)
-	OnKey  func(pane string, k host.Key)
+	OnType  func(pane, text string)
+	OnKey   func(pane string, k host.Key)
+	OnStart func(pane string, argv []string)
 
 	mu         sync.Mutex
 	workspaces []core.Workspace
@@ -55,7 +59,7 @@ type Fake struct {
 	order      []string
 	calls      []Call
 	notes      [][2]string
-	nWS, nPane int
+	nWS        int
 }
 
 // New is an empty Fake.
@@ -112,8 +116,13 @@ func (f *Fake) AddPane(workspace string) string {
 }
 
 func (f *Fake) newPane(workspace, cwd string) string {
-	f.nPane++
-	id := fmt.Sprintf("%s:p%d", workspace, f.nPane)
+	n := 1
+	for _, p := range f.panes {
+		if p.WorkspaceID == workspace {
+			n++
+		}
+	}
+	id := fmt.Sprintf("%s:p%d", workspace, n)
 	p := &Pane{SnapAgent: core.SnapAgent{PaneID: id, WorkspaceID: workspace, Status: "unknown"}, Proc: host.Process{Name: "sh", AtShell: true}}
 	if cwd != "" {
 		p.Cwd = &cwd
@@ -150,6 +159,9 @@ func (f *Fake) enter(method string, args ...string) error {
 	f.record(method, args...)
 	if f.Down {
 		return host.ErrUnreachable
+	}
+	if f.Fail != nil {
+		return f.Fail(method)
 	}
 	return nil
 }
@@ -434,6 +446,14 @@ func (f *Fake) Process(pane string) (host.Process, error) {
 }
 
 func (f *Fake) Start(pane string, argv []string) error {
+	err := f.start(pane, argv)
+	if err == nil && f.OnStart != nil {
+		f.OnStart(pane, argv)
+	}
+	return err
+}
+
+func (f *Fake) start(pane string, argv []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.enter("Start", append([]string{pane}, argv...)...); err != nil {

@@ -60,6 +60,14 @@ func TestContract(t *testing.T) {
 			call(5, "m1", "claude-opus-5-5", 3, 150000, 0, 2000, 500, ""),
 		},
 		CallAt: 5, CallContext: 152503, CallModel: "claude-opus-5-5",
+		Chat: []string{`{"type":"user","message":{"content":"hi"}}`,
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}`},
+		ChatItems: 2, ChatLast: "hello",
+		Skill: func(t *testing.T) (string, string) {
+			cwd := t.TempDir()
+			put(t, cwd+"/.claude/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: ship it\n---\n")
+			return cwd, "deploy"
+		},
 		Spend: lines(
 			userLine(0, "go"),
 			call(1, "m1", "claude-sonnet-5-5", 10, 0, 100, 0, 2, ""),
