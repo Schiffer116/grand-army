@@ -11,7 +11,7 @@ The chief-of-staff agent: whichever coding agent runs in Berthier's own reposito
 _Avoid_: orchestrator, controller, first mate
 
 **Notes**:
-A Corps's running record of open threads, commitments, and recent decisions, kept with its Board so any new session of its Main Agent (Berthier included) continues exactly where the last one stopped. How the user works is kept separately, in instructions. An idle Agent whose cache is about to go cold is asked once per idle episode to update stale Notes, so a later Revive or Fresh Start does not rebuild from old ones.
+A Corps's running record of open threads, commitments, and recent decisions, kept with its Board so any new session of its Main Agent (Berthier included) continues exactly where the last one stopped. How the user works is kept separately, in instructions.
 _Avoid_: memory, journal, log
 
 **Shutdown / Wake**:
@@ -110,7 +110,7 @@ A commit landed on a Corps's main branch, or a finished Division; Spend per deli
 _Avoid_: output, result
 
 **Turn origin**:
-What started a turn: the user, or Berthier (loop event, Ask, notify, Brief, restart continue, usage-limit resume, idle-Notes prompt, shutdown or wake broadcast).
+What started a turn: the user, or Berthier (loop event, Ask, notify, Brief, restart continue, usage-limit resume, shutdown or wake broadcast).
 _Avoid_: trigger, source
 
 **Command overhead**:

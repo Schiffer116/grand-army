@@ -124,16 +124,6 @@ func (e *Env) noteReadBy(reader, corps, text string) error {
 	return writeJSONAtomic(e.NotesRead, m, true)
 }
 
-// noteSet records when a Corps's Notes were last set (or confirmed current by a
-// set): the Main Loop asks an idle Agent to update Notes only if they were not
-// set since its last turn.
-func (e *Env) noteSet(corps string) error {
-	m := map[string]int64{}
-	readJSON(e.NotesSet, &m)
-	m[corps] = e.now()
-	return writeJSONAtomic(e.NotesSet, m, true)
-}
-
 func (e *Env) lastRead(corps string) (string, bool) {
 	m := map[string]map[string]string{}
 	readJSON(e.NotesRead, &m)
@@ -229,18 +219,12 @@ func cmdNotes(e *Env, args []string, stdio IO) error {
 	}
 	if text == strings.TrimSpace(now) {
 		fmt.Fprintf(stdio.Out, "%s's Notes unchanged\n", corps)
-		if err := e.noteRead(corps, now); err != nil {
-			return err
-		}
-		return e.noteSet(corps)
+		return e.noteRead(corps, now)
 	}
 	if err := store.set(corps, text); err != nil {
 		return err
 	}
 	if err := e.noteRead(corps, text); err != nil {
-		return err
-	}
-	if err := e.noteSet(corps); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdio.Out, "%s's Notes saved (%d bytes)\n", corps, len(text))

@@ -44,9 +44,6 @@ type Config struct {
 	// API call was less than CacheWarm ago or the context is under FrozenMin
 	// tokens; otherwise the Agent is Frozen.
 	CacheWarm, FrozenMin int64
-	// An idle Agent is asked once per episode to update its Corps's Notes when
-	// its last API call is CacheWarm-NotesLead old (still warm); 0: never.
-	NotesLead int64
 }
 
 // Snapshot is `herdr api snapshot`'s .result.snapshot.
@@ -124,8 +121,7 @@ type TickIn struct {
 	Budgets   map[string]float64
 	Obs       map[string]Obs
 	Spend     SpendBrief
-	Thaw      []Thaw           // the user's choices for Frozen Agents
-	NotesSet  map[string]int64 // when each Corps's Notes were last set (state/notes-set.json)
+	Thaw      []Thaw // the user's choices for Frozen Agents
 }
 
 // SpendBrief is what the Main Loop needs of the Profile: this quota week's
@@ -188,30 +184,11 @@ type Escalation struct {
 	Ev     Fields  `json:"ev"`
 }
 
-// notesReadSlack: the Notes window's transcript is read from this long before it opens.
-const notesReadSlack = 120
-
-func lookedAt(l []Look, pane, want string) bool {
-	for _, x := range l {
-		if x.PaneID == pane && inStrs(x.Want, want) {
-			return true
-		}
-	}
-	return false
-}
-
 // restartTries is how many ticks a restart's continue nudge is attempted.
 const restartTries = 5
 
 // Proceed prompts an Agent a restart cut off mid-turn to continue.
 type Proceed struct {
-	PaneID string `json:"pane_id"`
-	Name   string `json:"name"`
-	Ev     Fields `json:"ev"`
-}
-
-// NotesAsk prompts an idle Agent to update its Corps's Notes while its cache is still warm.
-type NotesAsk struct {
 	PaneID string `json:"pane_id"`
 	Name   string `json:"name"`
 	Ev     Fields `json:"ev"`
@@ -243,7 +220,6 @@ type TickOut struct {
 	Rename   []Rename     `json:"rename"`
 	Resume   []Resume     `json:"resume"`
 	Proceed  []Proceed    `json:"proceed"`
-	NotesAsk []NotesAsk   `json:"notes_ask"`
 	Escalate []Escalation `json:"escalate"`
 	Notify   []Escalation `json:"notify"`
 	Speak    []Speak      `json:"speak"`
@@ -379,7 +355,6 @@ func Tick(in TickIn) TickOut {
 			StateSeq:       a.StateSeq,
 			Limit:          pv.Limit,
 			LimitResumedAt: pv.LimitResumedAt,
-			NotesAsked:     pv.NotesAsked,
 			LastReviveAt:   pv.LastReviveAt,
 			DraftAt:        pv.DraftAt,
 		}
@@ -676,33 +651,6 @@ func Tick(in TickIn) TickOut {
 		frozen[f.pane] = &Frozen{Since: now, Why: f.why, Cache: f.cache}
 	}
 
-	// --- Notes: an Agent idle until its cache is nearly cold is asked once per
-	// idle episode to update its Corps's Notes (a prompt now still reads the
-	// cache; after it, a Revive or Fresh Start would rebuild from stale Notes).
-	// Only if the Notes are stale: not set since the Agent's last API call. The
-	// transcript is read only once the episode is about as old as the window.
-	var notesAsk []NotesAsk
-	var notesCache []string
-	if cfg.NotesLead > 0 {
-		from := cfg.CacheWarm - cfg.NotesLead
-		for _, e := range idle {
-			v := e.a
-			// The last call is about when the episode began, so a younger one is not read yet.
-			if strOr(v.Kind, "") != "claude" || frozen[e.pane] != nil || over[corpsOfLabel(v)] || v.NotesAsked == e.episode ||
-				now-v.StatusSince < from-notesReadSlack {
-				continue
-			}
-			c := obs(e.pane).Cache
-			if c == nil {
-				notesCache = append(notesCache, e.pane)
-				continue
-			}
-			if now-c.LastAt >= from && c.Warm(now, cfg) && in.NotesSet[corpsOfLabel(v)] < c.LastAt && !held(e.pane) {
-				notesAsk = append(notesAsk, NotesAsk{e.pane, nameOf(e.pane, v), with(about(e.pane), "session", v.SessionID, "idle_min", minutes(now-c.LastAt))})
-			}
-		}
-	}
-
 	// --- Restart: Herdr resumes every session but they come back idle, even
 	// those cut off mid-turn. A gap since the last state write (loop down,
 	// Herdr unreachable) means the Agents working before it may have been
@@ -819,10 +767,8 @@ func Tick(in TickIn) TickOut {
 			look = append(look, Look{k, prevAgents.M[k].SessionID, []string{"cache"}})
 		}
 	}
-	for _, k := range append(cacheLook, notesCache...) {
-		if !lookedAt(look, k, "cache") {
-			look = append(look, Look{k, live.M[k].SessionID, []string{"cache"}})
-		}
+	for _, k := range cacheLook {
+		look = append(look, Look{k, live.M[k].SessionID, []string{"cache"}})
 	}
 	for _, e := range limitCheck {
 		if !obs(e.pane).LimitSeen {
@@ -1378,13 +1324,6 @@ func Tick(in TickIn) TickOut {
 		}
 		a.LimitResumedAt = ptr(now)
 	}
-	for _, n := range notesAsk {
-		for _, e := range idle {
-			if e.pane == n.PaneID {
-				agents.M[n.PaneID].NotesAsked = e.episode
-			}
-		}
-	}
 	for _, f := range freezing {
 		if a := agents.M[f.pane]; a != nil { // not given a Fresh Start by itself
 			a.Frozen = frozen[f.pane]
@@ -1402,7 +1341,7 @@ func Tick(in TickIn) TickOut {
 	return TickOut{
 		State: State{Version: 1, UpdatedAt: now, Berthier: berthier, Corps: corps, BerthierDivisions: berthierDivisions,
 			Order: order, Agents: agents, Escalated: escalated, Interrupted: kept, AskLog: askLog},
-		Look: look, Events: decided, Revive: revive, Rename: rename, Resume: resume, Proceed: proceed, NotesAsk: notesAsk,
+		Look: look, Events: decided, Revive: revive, Rename: rename, Resume: resume, Proceed: proceed,
 		Escalate: escalate, Notify: notify, Speak: speak, Deliver: deliver, Fresh: fresh, Thawed: thawed,
 	}
 }

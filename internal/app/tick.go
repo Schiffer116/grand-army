@@ -47,11 +47,9 @@ func (e *Env) Tick() error {
 	budgets := e.ReadBudgets()
 	divisions := e.ReadDivisions()
 	spend := e.spendBrief(usage, now)
-	notesSet := map[string]int64{}
-	readJSON(e.NotesSet, &notesSet)
 	decide := func(obs map[string]core.Obs) core.TickOut {
 		return core.Tick(core.TickIn{Prev: prev, Snap: snap, Now: now, Cfg: e.CoreConfig(), Divisions: divisions,
-			Inbox: inbox, Usage: usage, Budgets: budgets, Obs: obs, Spend: spend, Thaw: thaws, NotesSet: notesSet})
+			Inbox: inbox, Usage: usage, Budgets: budgets, Obs: obs, Spend: spend, Thaw: thaws})
 	}
 
 	// --- Observe what the decisions need: most ticks need nothing, else more
@@ -110,15 +108,6 @@ func (e *Env) Tick() error {
 			e.Event("resumed", fmt.Sprintf("resumed %s in %s: usage limit reset", r.Name, r.PaneID), r.Ev)
 		} else {
 			e.Event("resume_failed", fmt.Sprintf("resume failed: %s in %s (usage limit reset): %s", r.Name, r.PaneID, err), with(r.Ev, "why", err.Error()))
-		}
-	}
-
-	// --- Notes: an idle Agent with a nearly cold cache is asked to update stale Notes (core marked the episode).
-	for _, n := range out.NotesAsk {
-		if err := e.H.PromptAgent(n.PaneID, core.Tag(core.TagNotes, core.NotesPrompt)); err == nil {
-			e.Event("notes_asked", fmt.Sprintf("asked %s in %s to update its Corps's Notes: idle, cache nearly cold", n.Name, n.PaneID), n.Ev)
-		} else {
-			e.Event("notes_ask_failed", fmt.Sprintf("notes prompt failed: %s in %s: %s", n.Name, n.PaneID, err), with(n.Ev, "why", err.Error()))
 		}
 	}
 

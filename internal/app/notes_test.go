@@ -24,7 +24,6 @@ func TestNotes(t *testing.T) {
 	eq(t, "a Corps without a Board", []any{strings.Contains(errs, "berthier board nobody"), code}, "[true 1]")
 	out, _, code = s.sh("open: \"quotes\"\nline two\n", "notes", "demo", "--set", "-")
 	eq(t, "first Notes", []any{out, code, readFile(filepath.Join(sk, "desc."+card))}, "[demo's Notes saved (23 bytes)\n 0 open: \"quotes\"\nline two]")
-	eq(t, "set time recorded", strings.Contains(readFile(e.NotesSet), `"demo"`), true)
 	out, _, _ = s.sh("", "notes", "demo")
 	eq(t, "read back", out, "open: \"quotes\"\nline two\n")
 

@@ -82,8 +82,6 @@ type Agent struct {
 	LastReviveAt   *int64 `json:"last_revive_at"`
 	// Last time its input box was read holding the user's draft.
 	DraftAt *int64 `json:"draft_at,omitempty"`
-	// Idle episode (state_seq:status_since) in which the Notes prompt went out.
-	NotesAsked string `json:"notes_asked,omitempty"`
 	// Due a Revive or a usage-limit resume with a cold cache: held for the user.
 	Frozen *Frozen `json:"frozen,omitempty"`
 }
