@@ -4,6 +4,8 @@ The repo is Berthier's home. `BERTHIER.md` is Berthier's persona. `berthier sess
 
 ## Commands
 
+Run `make help` for the entry points (build, test, e2e, lint, check, ...); the raw commands below are what they wrap.
+
 - Build: `go build -o bin/berthier ./cmd/berthier` (`bin/berthier` is gitignored and linked into `~/.local/bin`; the systemd units rebuild it on start).
 - Unit tests (pure, instant): `go test ./...` (`tests/fake-herdr` stands in for Herdr in the prompt and start tests).
 - E2E (real Herdr + Claude haiku, isolated `berthier-e2e-<pid>` session, so runs can overlap, ~1 min): `tests/e2e.sh` (builds the binary first).
