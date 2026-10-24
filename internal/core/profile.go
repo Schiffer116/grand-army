@@ -1,11 +1,11 @@
 package core
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -357,7 +357,7 @@ func Profile(in ProfileIn) ProfileView {
 		d.Sessions = append(d.Sessions, *s)
 	}
 	for k, d := range divs {
-		sort.Slice(d.Sessions, func(i, j int) bool { return d.Sessions[i].Totals.USD > d.Sessions[j].Totals.USD })
+		slices.SortFunc(d.Sessions, func(a, b SessionLine) int { return cmp.Compare(b.Totals.USD, a.Totals.USD) })
 		d.finish(units[k])
 		d.Waste = round4(wasteBy[k])
 		corps[k[0]].Divisions = append(corps[k[0]].Divisions, *d)
@@ -367,7 +367,7 @@ func Profile(in ProfileIn) ProfileView {
 		sumUnits[k[0]] += n
 	}
 	for name, c := range corps {
-		sort.Slice(c.Divisions, func(i, j int) bool { return c.Divisions[i].Totals.USD > c.Divisions[j].Totals.USD })
+		slices.SortFunc(c.Divisions, func(a, b Line) int { return cmp.Compare(b.Totals.USD, a.Totals.USD) })
 		c.finish(sumUnits[name])
 		c.Waste = round4(wasteBy[[2]string{name, "*"}])
 		if in.WeeksAgo == 0 {
@@ -382,11 +382,8 @@ func Profile(in ProfileIn) ProfileView {
 			v.Corps = append(v.Corps, *c)
 		}
 	}
-	sort.Slice(v.Corps, func(i, j int) bool {
-		if v.Corps[i].Totals.USD != v.Corps[j].Totals.USD {
-			return v.Corps[i].Totals.USD > v.Corps[j].Totals.USD
-		}
-		return v.Corps[i].Name < v.Corps[j].Name
+	slices.SortFunc(v.Corps, func(a, b Line) int {
+		return cmp.Or(cmp.Compare(b.Totals.USD, a.Totals.USD), cmp.Compare(a.Name, b.Name))
 	})
 	n := 0
 	for _, u := range units {
@@ -454,7 +451,7 @@ func weekly(in ProfileIn, cur float64, match func(Turn) bool) []WeekSpend {
 	for _, w := range byStart {
 		out = append(out, *w)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Start > out[j].Start })
+	slices.SortFunc(out, func(a, b WeekSpend) int { return cmp.Compare(b.Start, a.Start) })
 	return out
 }
 
@@ -553,7 +550,7 @@ func Waste(turns []Turn) []WasteItem {
 		}
 		out = append(out, *w)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].USD > out[j].USD })
+	slices.SortStableFunc(out, func(a, b WasteItem) int { return cmp.Compare(b.USD, a.USD) })
 	return out
 }
 

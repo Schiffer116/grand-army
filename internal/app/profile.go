@@ -2,11 +2,12 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -278,7 +279,7 @@ func (e *Env) LoadTurns() []core.Turn {
 		t.Rereads = append([]string(nil), t.Rereads...)
 		out[i] = t
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Start < out[j].Start })
+	slices.SortStableFunc(out, func(a, b core.Turn) int { return cmp.Compare(a.Start, b.Start) })
 	return out
 }
 
@@ -289,7 +290,7 @@ func (e *Env) SpendSeries() []core.SpendAt {
 	defer turnIndex.mu.Unlock()
 	e.loadIndex()
 	out := append([]core.SpendAt(nil), turnIndex.spend...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Ts < out[j].Ts })
+	slices.SortStableFunc(out, func(a, b core.SpendAt) int { return cmp.Compare(a.Ts, b.Ts) })
 	return out
 }
 

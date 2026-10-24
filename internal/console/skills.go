@@ -4,11 +4,12 @@ package console
 // /<name>: skills, custom commands, plugin skills and a few built-ins.
 
 import (
+	"cmp"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -53,7 +54,7 @@ func Skills(claudeDir, cwd string) []Skill {
 			out = append(out, s)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Skill) int { return cmp.Compare(a.Name, b.Name) })
 	return out
 }
 
@@ -156,11 +157,7 @@ func pluginSkills(claudeDir, cwd string) []Skill {
 	if json.Unmarshal(raw, &inst) != nil {
 		return nil
 	}
-	ids := make([]string, 0, len(inst.Plugins))
-	for id := range inst.Plugins {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
+	ids := slices.Sorted(maps.Keys(inst.Plugins))
 	var out []Skill
 	for _, id := range ids {
 		for _, e := range inst.Plugins[id] {

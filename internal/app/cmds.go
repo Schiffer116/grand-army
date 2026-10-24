@@ -3,17 +3,18 @@ package app
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -78,11 +79,14 @@ func cmdCounts(e *Env, args []string, io IO) error {
 			live = append(live, a)
 		}
 	}
-	sort.SliceStable(live, func(i, j int) bool {
-		if live[i].NeedsYou != live[j].NeedsYou {
-			return live[i].NeedsYou
+	slices.SortStableFunc(live, func(a, b core.AgentView) int {
+		if a.NeedsYou != b.NeedsYou {
+			if a.NeedsYou {
+				return -1
+			}
+			return 1
 		}
-		return live[i].Who < live[j].Who
+		return cmp.Compare(a.Who, b.Who)
 	})
 	lines := []string{}
 	for _, a := range live {
@@ -196,16 +200,7 @@ func (e *Env) corpsNames(withBerthier bool) []string {
 	for _, c := range st.Corps {
 		set[core.CorpsName(c.Name)] = true
 	}
-	return sortedKeys(set)
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	l := make([]string, 0, len(m))
-	for k := range m {
-		l = append(l, k)
-	}
-	slices.Sort(l)
-	return l
+	return slices.Sorted(maps.Keys(set))
 }
 
 func knownList(names []string) string {
@@ -388,7 +383,7 @@ func cmdAsk(e *Env, args []string, io IO) error {
 		}
 	}
 	if !known[to] {
-		return die("no Corps '%s'; known: %s", to, knownList(sortedKeys(known)))
+		return die("no Corps '%s'; known: %s", to, knownList(slices.Sorted(maps.Keys(known))))
 	}
 	from := ""
 	if st.Berthier != nil && *st.Berthier == pane {
