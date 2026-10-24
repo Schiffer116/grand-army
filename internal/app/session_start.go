@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,11 +15,8 @@ import (
 // workspace its Corps's Notes; a Division or anything outside the Army nothing.
 // Never fails the session: it prints what it has within BERTHIER_SESSION_START_WAIT.
 func cmdSessionStart(e *Env, args []string, io IO) error {
-	var in struct {
-		SessionID string `json:"session_id"`
-		Cwd       string `json:"cwd"`
-	}
-	json.NewDecoder(io.In).Decode(&in)
+	payload, _ := stdioReadAll(io.In)
+	in, _ := e.harness().Hook("SessionStart", payload)
 	persona := sameDir(in.Cwd, e.Root)
 	corps := "berthier"
 	if !persona {
@@ -37,7 +33,7 @@ func cmdSessionStart(e *Env, args []string, io IO) error {
 	}
 	// The Notes read is a skipli call: bounded, and the persona goes out regardless.
 	got := make(chan string, 1)
-	go func() { got <- e.notesForSession(corps, in.SessionID) }()
+	go func() { got <- e.notesForSession(corps, in.Session) }()
 	select {
 	case notes := <-got:
 		if notes != "" {

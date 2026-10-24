@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"berthier/internal/core"
+	"berthier/internal/host"
 )
 
 // ErrUnreachable is Herdr not answering `api snapshot`.
@@ -93,4 +94,15 @@ func (c Client) Snapshot() (core.Snapshot, error) {
 		s.Workspaces = append(s.Workspaces, w.core())
 	}
 	return s, nil
+}
+
+// KeyName is Herdr's name for a physical key.
+func KeyName(k host.Key) string {
+	switch k {
+	case host.KeyCtrlC:
+		return "ctrl+c"
+	case host.KeyCtrlU:
+		return "ctrl+u"
+	}
+	return string(k)
 }

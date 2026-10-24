@@ -1,4 +1,4 @@
-package core
+package claude
 
 import (
 	"strings"
@@ -128,43 +128,6 @@ func TestInputDraft(t *testing.T) {
 		{"no box", "● working\r\n", false},
 	} {
 		if got := InputDraft(c.screen); got != c.want {
-			t.Errorf("%s: got %v", c.name, got)
-		}
-	}
-}
-
-func TestSlugAndNames(t *testing.T) {
-	for in, want := range map[string]string{"Dark Mode": "dark-mode", "demo-dark-mode": "demo-dark-mode", "9 Lives!": "lives", ".dot files": "dot-files",
-		"abcdefghijklmnopqrstuvwxyzabcdefghij": "abcdefghijklmnopqrstuvwxyzabcdef"} {
-		if got := Slug(in); got != want {
-			t.Errorf("Slug(%q) = %q, want %q", in, got, want)
-		}
-	}
-	if CorpsName(".Dotfiles") != "dotfiles" || Spoken(".dark-mode_x") != "dark mode x" || FallbackName("W1:P1") != "a-w1-p1" {
-		t.Error("names")
-	}
-}
-
-func TestTranscriptInterrupted(t *testing.T) {
-	sys := `{"type":"system","subtype":"turn_duration"}`
-	asst := func(stop string) string {
-		return `{"type":"assistant","message":{"stop_reason":"` + stop + `","content":[]}}`
-	}
-	cases := []struct {
-		name  string
-		lines []string
-		want  bool
-	}{
-		{"tool result last", []string{asst("tool_use"), `{"type":"user","message":{"role":"user","content":[{"type":"tool_result"}]}}`, sys}, true},
-		{"task notification last", []string{asst("end_turn"), `{"type":"user","message":{"role":"user","content":"<task-notification>done</task-notification>"}}`}, true},
-		{"unanswered tool call", []string{asst("tool_use")}, true},
-		{"finished turn", []string{`{"type":"user","message":{"role":"user","content":"hi"}}`, asst("end_turn"), sys}, false},
-		{"user interrupt", []string{`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}`}, false},
-		{"no transcript", nil, false},
-		{"torn line is skipped", []string{asst("tool_use"), `{"type":"us`}, true},
-	}
-	for _, c := range cases {
-		if got := TranscriptInterrupted(c.lines); got != c.want {
 			t.Errorf("%s: got %v", c.name, got)
 		}
 	}

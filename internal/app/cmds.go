@@ -676,28 +676,28 @@ func cmdDemo(e *Env, args []string, io IO) error {
 // without `berthier report` gets one written for it, from the turn's final
 // message, so no turn is blocked for a report. Reads the hook's JSON on stdin.
 func cmdHookStop(e *Env, args []string, io IO) error {
-	var in struct {
-		SessionID      string `json:"session_id"`
-		TranscriptPath string `json:"transcript_path"`
+	payload, _ := stdioReadAll(io.In)
+	in, err := e.harness().Hook("Stop", payload)
+	if err != nil {
+		return nil
 	}
-	json.NewDecoder(io.In).Decode(&in)
 	pane := e.getenv("HERDR_PANE_ID")
-	if pane == "" || in.SessionID == "" {
+	if pane == "" || in.Session == "" {
 		return nil
 	}
-	if st, err := os.Stat(in.TranscriptPath); err != nil || !st.Mode().IsRegular() {
+	if st, err := os.Stat(in.Transcript); err != nil || !st.Mode().IsRegular() {
 		return nil
 	}
-	start, final, ok := readTurn(in.TranscriptPath)
+	start, final, ok := readTurn(in.Transcript)
 	if !ok {
 		return nil
 	}
 	var rep core.Report
-	readJSON(filepath.Join(e.Reports, in.SessionID+".json"), &rep)
+	readJSON(filepath.Join(e.Reports, in.Session+".json"), &rep)
 	if rep.At != nil && *rep.At >= start {
 		return nil
 	}
-	return e.writeReport(in.SessionID, pane, autoReport(final))
+	return e.writeReport(in.Session, pane, autoReport(final))
 }
 
 // autoReport is the report for a turn its Agent did not report: the first

@@ -319,3 +319,7 @@ func ledgerRows(path string, offset, size int64) []core.Row {
 	}
 	return rows
 }
+
+// stdioReadAll reads a command's input (a hook's JSON) whole; a failed read
+// leaves what came.
+func stdioReadAll(r io.Reader) ([]byte, error) { return io.ReadAll(r) }

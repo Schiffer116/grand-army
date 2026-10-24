@@ -23,20 +23,20 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
-// Key is a named key press; the adapter maps it to the Host's own keys.
+// Key is a physical key press, by name. What a key means to the program in
+// the pane (interrupt, clear the draft, end the session) is the Harness's
+// business, not the Host's; the adapter maps these names to the Host's own.
 type Key string
 
 const (
-	// KeyInterrupt is Ctrl-C: stops a foreground shell command, or an Agent's turn.
-	KeyInterrupt Key = "interrupt"
-	// KeyEnter submits the pane's input line.
-	KeyEnter Key = "enter"
-	// KeyClearDraft empties the pane's input line without submitting it.
-	KeyClearDraft Key = "clear-draft"
+	KeyEscape Key = "escape"
+	KeyEnter  Key = "enter"
+	KeyCtrlC  Key = "ctrl-c"
+	KeyCtrlU  Key = "ctrl-u"
 )
 
-// Keys are all the named keys, for commands to validate against.
-var Keys = []Key{KeyInterrupt, KeyEnter, KeyClearDraft}
+// Keys are all the keys, for commands to validate against.
+var Keys = []Key{KeyEscape, KeyEnter, KeyCtrlC, KeyCtrlU}
 
 // ReadOpts says what part of a pane's terminal to read.
 type ReadOpts struct {
@@ -107,7 +107,7 @@ type Host interface {
 	// Type puts text into the pane's input as typed, without pressing Enter.
 	// Text may hold newlines.
 	Type(pane, text string) error
-	// Key presses a named key in the pane.
+	// Key presses a physical key in the pane.
 	Key(pane string, k Key) error
 	// RenamePane gives the pane (and so its Agent) a name.
 	RenamePane(pane, name string) error

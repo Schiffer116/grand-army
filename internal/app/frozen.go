@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"berthier/internal/core"
+	"berthier/internal/harness"
+	"berthier/internal/herdr"
 )
 
 // Frozen Agents: the user's choice (`revive`, `fresh`, the Console) is a file
@@ -126,9 +128,9 @@ func (e *Env) freshStart(f core.FreshStart) {
 		e.H.Run("notification", "show", "Fresh Start failed", "--body", fmt.Sprintf("%s (%s): %s", f.Name, f.PaneID, why), "--sound", "request")
 	}
 	if f.Live {
-		// Claude stopped on its usage limit: two Ctrl-C end it, back to the shell.
-		for i := 0; i < 2; i++ {
-			e.H.Run("pane", "send-keys", f.PaneID, "ctrl+c")
+		// Claude stopped on its usage limit: end it, back to the shell.
+		for _, k := range e.harness().Keys(harness.End) {
+			e.H.Run("pane", "send-keys", f.PaneID, herdr.KeyName(k))
 			time.Sleep(300 * time.Millisecond)
 		}
 		for deadline := time.Now().Add(15 * time.Second); !e.paneAtShell(f.PaneID) && time.Now().Before(deadline); {

@@ -155,7 +155,7 @@ func TestClaudeFlags(t *testing.T) {
 		{"adopted", "", "--disallowedTools Artifact"},
 		{".Feat", "", "--disallowedTools Artifact"},
 	} {
-		eq(t, c.label+" "+c.model, strings.Join(e.claudeFlags(c.label, c.model), " "), c.want)
+		eq(t, c.label+" "+c.model, strings.Join(e.launchFlags(e.launchOpts(c.label, c.model)), " "), c.want)
 	}
 }
 

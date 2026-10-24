@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
+	"berthier/internal/claude"
 	"berthier/internal/core"
+	"berthier/internal/harness"
 )
 
 // Workspaces lists Herdr's workspaces.
@@ -15,26 +17,29 @@ func (e *Env) Workspaces() ([]core.Workspace, error) { return e.H.Workspaces() }
 // Snapshot is the Host's view of every workspace and pane.
 func (e *Env) Snapshot() (core.Snapshot, error) { return e.H.Snapshot() }
 
-// claudeFlags are the flags Claude starts with after `--` in the workspace
-// labelled label: its model, and what its role allows. A Division's Agent may
-// not use Artifact unless division-new --artifact. A Main Agent (not a
-// Division) with no recorded model runs on CorpsModel. Berthier's persona comes
-// from the SessionStart hook (`berthier session-start`), not from a flag.
-func (e *Env) claudeFlags(label, model string) []string {
-	var f []string
-	_, isDivision := e.ReadDivisions()[core.CorpsName(label)]
+// harness is the Harness the Agents run: Claude Code.
+func (e *Env) harness() harness.Harness { return claude.Claude{ConfigDir: e.ClaudeDir} }
+
+// launchOpts is how Claude starts in the workspace labelled label: its model,
+// and what its role allows. A Division's Agent may not use Artifact unless
+// division-new --artifact. A Main Agent (not a Division) with no recorded
+// model runs on CorpsModel. Berthier's persona comes from the SessionStart
+// hook (`berthier session-start`), not from a flag.
+func (e *Env) launchOpts(label, model string) harness.LaunchOpts {
+	o := harness.LaunchOpts{Model: model}
+	d, isDivision := e.ReadDivisions()[core.CorpsName(label)]
 	if model == "" && !isDivision {
-		model = e.CorpsModel
+		o.Model = e.CorpsModel
 	}
-	if model != "" {
-		f = append(f, "--model", model)
+	if isDivision && !d.Artifact {
+		o.Disallow = []string{"Artifact"}
 	}
-	name := core.CorpsName(label)
-	if d, ok := e.ReadDivisions()[name]; ok && !d.Artifact {
-		f = append(f, "--disallowedTools", "Artifact")
-	}
-	return f
+	return o
 }
+
+// launchFlags are the arguments of the Harness's launch after its program
+// name, which is what Herdr's `agent start --kind claude` takes after `--`.
+func (e *Env) launchFlags(o harness.LaunchOpts) []string { return e.harness().Launch(o)[1:] }
 
 // StartClaude starts Claude as Agent name in pane, in the workspace labelled
 // label, then sends the Brief with PromptAgent: Herdr refuses multi-line start
@@ -51,7 +56,7 @@ func (e *Env) StartClaude(name, pane, brief, label, model string, warn func(stri
 // startClaude is StartClaude with a first prompt already tagged.
 func (e *Env) startClaude(name, pane, brief, label, model string, warn func(string)) string {
 	args := []string{"agent", "start", name, "--kind", "claude", "--pane", pane, "--timeout", fmt.Sprint(e.StartTimeoutMS)}
-	if flags := e.claudeFlags(label, model); len(flags) > 0 {
+	if flags := e.launchFlags(e.launchOpts(label, model)); len(flags) > 0 {
 		args = append(append(args, "--"), flags...)
 	}
 	status := "started"

@@ -71,12 +71,13 @@ func (e *Env) Tick() error {
 
 	// --- Revive: resume the gone session in the pane it died in.
 	for _, r := range out.Revive {
-		args := []string{"agent", "start", r.Name, "--kind", "claude", "--pane", r.PaneID, "--timeout", fmt.Sprint(e.StartTimeoutMS), "--", "--resume", r.SessionID}
 		label := ""
 		if a := out.State.Agents.Get(r.PaneID); a != nil {
 			label = strOr(a.WorkspaceLabel)
 		}
-		args = append(args, e.claudeFlags(label, e.ModelOf(label))...)
+		opts := e.launchOpts(label, e.ModelOf(label))
+		opts.Resume = r.SessionID
+		args := append([]string{"agent", "start", r.Name, "--kind", "claude", "--pane", r.PaneID, "--timeout", fmt.Sprint(e.StartTimeoutMS), "--"}, e.launchFlags(opts)...)
 		// Herdr counts the start a success even if Claude exited at once
 		// (e.g. "No conversation found"): the pane is back at its shell.
 		if _, err := e.H.Run(args...); err == nil && !e.paneAtShell(r.PaneID) {
@@ -262,7 +263,7 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 		switch w {
 		case "exited":
 			out, err := e.H.Run("pane", "read", l.PaneID, "--source", "recent-unwrapped", "--lines", "20")
-			b := err == nil && core.ExitedDeliberately(string(out), sid)
+			b := err == nil && e.harness().ExitedDeliberately(string(out), sid)
 			o.Exited = &b
 		case "no_transcript":
 			b := !e.hasTranscript(sid)
@@ -277,8 +278,8 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 			// Unknown (no transcript) is a zero Cache: small, so resumed as before.
 			c := core.Cache{}
 			if m := e.transcriptFiles(sid); len(m) > 0 {
-				if c, _ = core.CacheOf(TailLines(m[0], 200)); c.LastAt == 0 {
-					c, _ = core.CacheOf(TailLines(m[0], 5000))
+				if c, _ = e.harness().CacheOf(TailLines(m[0], 200)); c.LastAt == 0 {
+					c, _ = e.harness().CacheOf(TailLines(m[0], 5000))
 				}
 			}
 			o.Cache = &c
@@ -294,7 +295,7 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 				continue
 			}
 			o.LimitSeen = true
-			if t, ok := core.UsageLimitReset(string(out), now, time.Local); ok {
+			if t, ok := e.harness().UsageLimit(string(out), now, time.Local); ok {
 				o.LimitReset = &t
 			}
 		}
@@ -309,13 +310,10 @@ func (e *Env) transcriptInterrupted(sid string) bool {
 	if len(m) == 0 {
 		return false
 	}
-	return core.TranscriptInterrupted(TailLines(m[0], 200))
+	return e.harness().Interrupted(TailLines(m[0], 200))
 }
 
-func (e *Env) transcriptFiles(sid string) []string {
-	m, _ := filepath.Glob(filepath.Join(e.ClaudeDir, "projects", "*", sid+".jsonl"))
-	return m
-}
+func (e *Env) transcriptFiles(sid string) []string { return e.harness().Transcripts(sid) }
 
 // hasTranscript: Claude can only resume a session it saved.
 func (e *Env) hasTranscript(sid string) bool { return len(e.transcriptFiles(sid)) > 0 }

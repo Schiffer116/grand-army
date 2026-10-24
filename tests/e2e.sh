@@ -270,7 +270,7 @@ cut=$(h workspace create --cwd "$repo" --label cut --no-focus | jq -re '.result.
 h pane run "$cut" "claude --model haiku --settings '{\"permissions\":{\"allow\":[\"Bash\"]}}'" >/dev/null
 for _ in $(seq 30); do h agent get "$cut" >/dev/null 2>&1 && break; sleep 1; done
 h agent wait "$cut" --until idle --timeout 60000 >/dev/null
-h agent prompt "$cut" "Run this bash command, then reply with just: done. Command: sleep 60" >/dev/null
+h agent prompt "$cut" "Run this bash command, then reply with just: done. Command: sleep 300" >/dev/null
 h agent wait "$cut" --until working --timeout 60000 >/dev/null
 sleep 5  # the tool call reaches the transcript
 bin/berthier tick

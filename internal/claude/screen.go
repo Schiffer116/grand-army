@@ -1,7 +1,6 @@
-package core
+package claude
 
 import (
-	"encoding/json"
 	"os"
 	"regexp"
 	"strings"
@@ -212,40 +211,4 @@ func noSpace(s string) string {
 		}
 		return r
 	}, s)
-}
-
-// TranscriptInterrupted: did a session's transcript end mid-turn (a tool
-// result, a task notification or a tool call nobody answered) rather than on
-// a finished assistant turn or the user's own interrupt? lines are the end of
-// the transcript (JSON Lines). No message at all counts as finished.
-func TranscriptInterrupted(lines []string) bool {
-	for i := len(lines) - 1; i >= 0; i-- {
-		var m struct {
-			Type    string `json:"type"`
-			Message struct {
-				StopReason string          `json:"stop_reason"`
-				Content    json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal([]byte(lines[i]), &m) != nil || (m.Type != "user" && m.Type != "assistant") {
-			continue
-		}
-		if m.Type == "assistant" {
-			return m.Message.StopReason != "end_turn"
-		}
-		text := string(m.Message.Content)
-		var s string
-		var parts []struct{ Text string }
-		if json.Unmarshal(m.Message.Content, &s) == nil {
-			text = s
-		} else if json.Unmarshal(m.Message.Content, &parts) == nil {
-			var t []string
-			for _, p := range parts {
-				t = append(t, p.Text)
-			}
-			text = strings.Join(t, " ")
-		}
-		return !strings.Contains(text, "[Request interrupted by user")
-	}
-	return false
 }

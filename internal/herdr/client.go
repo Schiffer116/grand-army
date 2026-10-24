@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"berthier/internal/core"
+	"berthier/internal/claude"
+	"berthier/internal/harness"
 )
 
 // Client runs `herdr`. Session empty means the user's default Herdr session;
@@ -21,6 +22,16 @@ type Client struct {
 	Bin        string
 	Session    string
 	PromptPoll time.Duration // how often PromptAgent checks that Claude took a prompt
+	// Harness reads the Agent's screen; the zero value is Claude Code. (Until
+	// the Host port replaces Client, which then takes the Harness as a port.)
+	Harness harness.Harness
+}
+
+func (c Client) harness() harness.Harness {
+	if c.Harness == nil {
+		return claude.Claude{}
+	}
+	return c.Harness
 }
 
 // FromEnv is the client the BERTHIER_HERDR* variables describe.
@@ -114,13 +125,13 @@ func (c Client) agentState(pane string) (agentInfo, error) {
 var ErrDraft = errors.New("its input box holds the user's draft (they may be typing); not sent, try again later")
 
 // HasDraft reports whether the Claude input box in pane holds text someone
-// typed (core.InputDraft); Claude's dim suggested prompt is not a draft.
+// typed (Harness.Draft); Claude's dim suggested prompt is not a draft.
 func (c Client) HasDraft(pane string) (bool, error) {
 	screen, err := c.Run("pane", "read", pane, "--source", "visible", "--format", "ansi")
 	if err != nil {
 		return false, err
 	}
-	return core.InputDraft(string(screen)), nil
+	return c.harness().Draft(string(screen)), nil
 }
 
 // PromptAgent prompts the Agent in pane and makes sure Claude took it: `agent
@@ -154,7 +165,7 @@ func (c Client) PromptAgent(pane, text string) error {
 			continue
 		}
 		screen, _ := c.Command("pane", "read", pane, "--source", "visible").Output()
-		holds := core.InputHolds(string(screen), text)
+		holds := c.harness().PromptHeld(string(screen), text)
 		if !holds && now.Status == "working" {
 			return nil
 		}
@@ -181,7 +192,7 @@ func (c Client) ClearAgent(pane string) error {
 	if d, _ := c.HasDraft(pane); d {
 		return fmt.Errorf("%s: %w", pane, ErrDraft)
 	}
-	if _, err := c.Run("agent", "prompt", pane, "/clear"); err != nil {
+	if _, err := c.Run("agent", "prompt", pane, c.harness().ClearCommand()); err != nil {
 		return err
 	}
 	for polls := 1; polls <= 40; polls++ {
@@ -195,7 +206,7 @@ func (c Client) ClearAgent(pane string) error {
 		}
 		// Claude's slash menu can hold the command until Enter.
 		if polls%8 == 0 {
-			if screen, _ := c.Command("pane", "read", pane, "--source", "visible").Output(); core.InputHolds(string(screen), "/clear") {
+			if screen, _ := c.Command("pane", "read", pane, "--source", "visible").Output(); c.harness().PromptHeld(string(screen), "/clear") {
 				c.Run("agent", "send-keys", pane, "enter")
 			}
 		}

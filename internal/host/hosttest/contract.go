@@ -225,7 +225,7 @@ func panes(t *testing.T, h host.Host) {
 		t.Fatal(err)
 	}
 	eventually(t, "typed text on screen", func() bool { return strings.Contains(screen(h, pane, host.ReadOpts{}), "draft-one") })
-	if err := h.Key(pane, host.KeyClearDraft); err != nil {
+	if err := h.Key(pane, host.KeyCtrlU); err != nil {
 		t.Fatal(err)
 	}
 	eventually(t, "the draft gone", func() bool { return !strings.Contains(screen(h, pane, host.ReadOpts{}), "draft-one") })
@@ -282,8 +282,14 @@ func processes(t *testing.T, h host.Host) {
 	if err := h.Start(pane, []string{"true"}); err == nil {
 		t.Error("Start in a pane that is not at a shell succeeded")
 	}
-	// An interrupt ends it: back at the shell.
-	if err := h.Key(pane, host.KeyInterrupt); err != nil {
+	// Escape is harmless to a shell command; Ctrl-C ends it: back at the shell.
+	if err := h.Key(pane, host.KeyEscape); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := h.Process(pane); !p.Alive() {
+		t.Errorf("Escape ended the process: %+v", p)
+	}
+	if err := h.Key(pane, host.KeyCtrlC); err != nil {
 		t.Fatal(err)
 	}
 	eventually(t, "back at the shell", func() bool { p, _ := h.Process(pane); return p.AtShell })

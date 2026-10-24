@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -50,30 +49,6 @@ func (c Cache) WriteUSD(n int64) (float64, bool) {
 		t = Tokens{W1h: n}
 	}
 	return p.USD(t, false), true
-}
-
-// CacheOf reads a transcript's last lines for its last real API call
-// (Claude's own synthetic messages, such as a usage-limit stop, call nothing).
-func CacheOf(lines []string) (Cache, bool) {
-	for i := len(lines) - 1; i >= 0; i-- {
-		if !strings.Contains(lines[i], `"usage"`) {
-			continue
-		}
-		var l tLine
-		if json.Unmarshal([]byte(lines[i]), &l) != nil || l.Type != "assistant" || l.Message.Usage == nil ||
-			l.Message.Model == "" || strings.HasPrefix(l.Message.Model, "<") {
-			continue
-		}
-		u := l.Message.Usage
-		if u.In+u.CacheRead+u.CacheCreation == 0 {
-			continue
-		}
-		c := Cache{LastAt: int64(parseTS(l.Timestamp)), Context: u.In + u.CacheRead + u.CacheCreation + u.Out, Model: l.Message.Model}
-		// Claude Code writes with a 1-hour TTL unless the split says otherwise.
-		c.TTL1h = u.Split == nil || u.Split.W1h > 0 || u.Split.W5m == 0
-		return c, true
-	}
-	return Cache{}, false
 }
 
 // FreshPrompt is the first prompt of a Fresh Start: rebuild from what is

@@ -5,15 +5,8 @@ import (
 	"testing"
 )
 
-func TestCacheOf(t *testing.T) {
-	lines := []string{
-		`{"type":"user","timestamp":"2026-10-23T10:00:00Z","message":{"content":"go"}}`,
-		`{"type":"assistant","timestamp":"2026-10-23T10:00:05Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":3,"cache_read_input_tokens":150000,"cache_creation_input_tokens":2000,"output_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":2000}}}}`,
-		`{"type":"assistant","timestamp":"2026-10-23T12:00:00Z","message":{"id":"m2","model":"<synthetic>","usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0}}}`,
-		`{"type":"system","timestamp":"2026-10-23T12:00:01Z"}`,
-	}
-	c, ok := CacheOf(lines)
-	check(t, "the last real call, not the synthetic limit stop", []any{ok, c}, `[true,{"last_at":1792749605,"context":152503,"model":"claude-opus-5-5","ttl_1h":true}]`)
+func TestCache(t *testing.T) {
+	c := Cache{LastAt: 1792749605, Context: 152503, Model: "claude-opus-5-5", TTL1h: true}
 	usd, _ := c.ReviveUSD()
 	check(t, "a Revive writes the context at the 1h rate", round2(usd), `1.22`)
 	c.TTL1h = false
@@ -23,9 +16,6 @@ func TestCacheOf(t *testing.T) {
 	check(t, "a Fresh Start's estimate priced the same way", round2(usd), `0.30`)
 	if _, ok := (Cache{Model: "gpt-9"}).WriteUSD(1); ok {
 		t.Error("an unpriced model priced")
-	}
-	if _, ok := CacheOf(lines[2:]); ok {
-		t.Error("a cache from no real call")
 	}
 	if _, ok := (Cache{Model: "gpt-9"}).ReviveUSD(); ok {
 		t.Error("an unpriced model priced")

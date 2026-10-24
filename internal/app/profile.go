@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -40,22 +39,8 @@ func (e *Env) profileSince(now int64) float64 {
 	return max(since, e.ProfileSince)
 }
 
-// allTranscripts lists Claude Code's transcripts: main sessions and subagents.
-func (e *Env) allTranscripts() []string {
-	root := filepath.Join(e.ClaudeDir, "projects")
-	a, _ := filepath.Glob(filepath.Join(root, e.ProfileProjects, "*.jsonl"))
-	b, _ := filepath.Glob(filepath.Join(root, e.ProfileProjects, "*", "subagents", "*.jsonl"))
-	return append(a, b...)
-}
-
-func transcriptFile(path string) core.TranscriptFile {
-	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-	if filepath.Base(filepath.Dir(path)) == "subagents" {
-		parent := filepath.Base(filepath.Dir(filepath.Dir(path)))
-		return core.TranscriptFile{Session: parent + "/" + id, Parent: parent}
-	}
-	return core.TranscriptFile{Session: id}
-}
+// allTranscripts lists the Harness's transcripts: main sessions and subagents.
+func (e *Env) allTranscripts() []string { return e.harness().AllTranscripts(e.ProfileProjects) }
 
 // UpdateProfile folds new transcript lines into the Profile index. Locked, so
 // the Main Loop and the commands never fold the same lines twice.
@@ -101,7 +86,7 @@ func (e *Env) UpdateProfile() error {
 			c = core.Cursor{}
 		}
 		lines, next := readLines(path, c.Offset, size)
-		c, rows := core.FoldTranscript(c, transcriptFile(path), lines, placer.Place)
+		c, rows := e.harness().Spend(c, e.harness().TranscriptFile(path), lines, placer.Place)
 		c.Offset, c.Size, c.MTime = next, size, mtime
 		if float64(now)-float64(info.ModTime().Unix()) > 86400 {
 			c.Pending, c.Reads = nil, nil // an idle session: re-reading it later is no waste

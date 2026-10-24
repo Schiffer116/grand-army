@@ -384,14 +384,15 @@ func (f *Fake) Key(pane string, k host.Key) error {
 			p.Lines = append(p.Lines, p.Input)
 		}
 		p.Input = ""
-	case host.KeyInterrupt:
+	case host.KeyEscape:
+	case host.KeyCtrlC:
 		p.Lines = append(p.Lines, "^C")
 		p.Input = ""
 		if !p.Proc.AtShell {
 			p.kill()
 			p.Proc = host.Process{Name: "sh", AtShell: true}
 		}
-	case host.KeyClearDraft:
+	case host.KeyCtrlU:
 		p.Input = ""
 	default:
 		f.mu.Unlock()
