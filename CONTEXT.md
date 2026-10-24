@@ -1,6 +1,6 @@
 # Berthier
 
-Berthier is the user's chief of staff for coding agents. It runs the Grand Army of Agents in Herdr: it starts them on the user's command, keeps them alive, checks on them, and tells the user where things stand. The user talks to Agents directly; Berthier is never in that loop.
+Berthier is the user's chief of staff for coding agents. It runs the Grand Army of Agents in a Host (Herdr today): it starts them on the user's command, keeps them alive, checks on them, and tells the user where things stand. The user talks to Agents directly; Berthier is never in that loop.
 
 ## Language
 
@@ -25,16 +25,20 @@ At 90% of the five-hour or seven-day window, each idle Agent is asked once per w
 The deterministic, always-running process that observes the Grand Army, Revives gone Agents, and Escalates everything else to Berthier.
 _Avoid_: daemon, watcher, supervisor
 
+**Host**:
+The terminal multiplexer the Grand Army lives in: workspaces of panes, each pane running one process. Berthier reaches it only through its own Host port; Herdr is today's adapter, tmux could be another. Only Berthier's own Corps and its Divisions know which Host it is.
+_Avoid_: herdr (outside the adapter), terminal, multiplexer
+
 **Corps**:
-One Herdr workspace, whatever it contains; it need not be a git repository. Same word singular and plural, as in Napoleon's Grande Armée.
+One Host workspace, whatever it contains; it need not be a git repository. Same word singular and plural, as in Napoleon's Grande Armée.
 _Avoid_: project, herdr session, campaign, repo, folder
 
 **Division**:
-A sub-unit of a Corps, with its own Agent; Berthier records which Corps it belongs to. Herdr nests a spawned one under its Corps. It is either a worktree the Main Agent spawns for a side feature, which ends once the user has reviewed it, or an existing workspace the Corps adopted, which lasts. A spawned one runs on a model its Corps picks (`division-new --model`, default `BERTHIER_DIVISION_MODEL`, haiku), kept across Revives (a Corps's Main Agent runs on `BERTHIER_CORPS_MODEL`, opus); its Agent has no Artifact unless `division-new --artifact`. The Corps's Main Agent commands it: assigns and reviews its work, and receives its Escalations.
+A sub-unit of a Corps, with its own Agent; Berthier records which Corps it belongs to. The Host nests a spawned one under its Corps. It is either a worktree the Main Agent spawns for a side feature, which ends once the user has reviewed it, or an existing workspace the Corps adopted, which lasts. A spawned one runs on a model its Corps picks (`division-new --model`, default `BERTHIER_DIVISION_MODEL`, haiku), kept across Revives (a Corps's Main Agent runs on `BERTHIER_CORPS_MODEL`, opus); its Agent has no Artifact unless `division-new --artifact`. The Corps's Main Agent commands it: assigns and reviews its work, and receives its Escalations.
 _Avoid_: task, sub-project, child, team
 
 **Agent**:
-One coding-agent session in a Herdr pane inside a Corps, whether the user or Berthier started it.
+One coding-agent session in a Host pane inside a Corps, whether the user or Berthier started it.
 _Avoid_: worker, crewmate, bot
 
 **Main Agent**:

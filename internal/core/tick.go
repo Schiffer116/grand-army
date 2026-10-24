@@ -48,44 +48,39 @@ type Config struct {
 	CacheWarm, FrozenMin int64
 }
 
-// Snapshot is `herdr api snapshot`'s .result.snapshot.
+// Snapshot is what the Host reports of the Grand Army's workspaces and panes.
+// The Host adapter maps its own wire format to it; no JSON tags here.
 type Snapshot struct {
-	Workspaces []Workspace `json:"workspaces"`
-	Agents     []SnapAgent `json:"agents"`
-	Panes      []SnapAgent `json:"panes"`
+	Workspaces []Workspace
+	Agents     []SnapAgent
+	Panes      []SnapAgent
 }
 
 type Workspace struct {
-	ID       string `json:"workspace_id"`
-	Label    string `json:"label"`
-	Number   int    `json:"number"`
-	Worktree *struct {
-		RepoRoot     *string `json:"repo_root"`
-		CheckoutPath *string `json:"checkout_path"`
-	} `json:"worktree"`
+	ID       string
+	Label    string
+	Number   int
+	Worktree *Worktree
+}
+
+// Worktree is where a worktree workspace's checkout lives.
+type Worktree struct {
+	RepoRoot     *string
+	CheckoutPath *string
 }
 
 // SnapAgent is an agent, or a pane that may still hold a session, in a snapshot.
 type SnapAgent struct {
-	PaneID       string  `json:"pane_id"`
-	WorkspaceID  string  `json:"workspace_id"`
-	TabID        *string `json:"tab_id"`
-	Agent        *string `json:"agent"`
-	Status       string  `json:"agent_status"`
-	Cwd          *string `json:"cwd"`
-	Title        *string `json:"terminal_title_stripped"`
-	Name         *string `json:"name"`
-	StateSeq     *int64  `json:"state_change_seq"`
-	AgentSession *struct {
-		Value *string `json:"value"`
-	} `json:"agent_session"`
-}
-
-func (a SnapAgent) session() *string {
-	if a.AgentSession == nil {
-		return nil
-	}
-	return a.AgentSession.Value
+	PaneID      string
+	WorkspaceID string
+	TabID       *string
+	Agent       *string
+	Status      string
+	Cwd         *string
+	Title       *string
+	Name        *string
+	StateSeq    *int64
+	Session     *string
 }
 
 // Ask is a pending `berthier ask` (a file of state/inbox).
@@ -308,7 +303,7 @@ func Tick(in TickIn) TickOut {
 	}
 	listed := append([]SnapAgent(nil), in.Snap.Agents...)
 	for _, p := range in.Snap.Panes {
-		if p.session() != nil && !agentPanes[p.PaneID] {
+		if p.Session != nil && !agentPanes[p.PaneID] {
 			listed = append(listed, p)
 		}
 	}
@@ -320,7 +315,7 @@ func Tick(in TickIn) TickOut {
 			pv = *p
 		}
 		same := p != nil && pv.Status == a.Status
-		sid := a.session()
+		sid := a.Session
 		if sid == nil {
 			sid = pv.SessionID
 		}
@@ -569,7 +564,7 @@ func Tick(in TickIn) TickOut {
 	rename := []Rename{}
 	for _, a := range in.Snap.Agents {
 		v := live.M[a.PaneID]
-		if a.Name != nil || v.Name == nil || !eqStr(a.session(), v.SessionID) || taken[*v.Name] {
+		if a.Name != nil || v.Name == nil || !eqStr(a.Session, v.SessionID) || taken[*v.Name] {
 			continue
 		}
 		rename = append(rename, Rename{a.PaneID, *v.Name, strOr(v.SessionID, ""), with(about(a.PaneID), "session", v.SessionID)})

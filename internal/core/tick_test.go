@@ -42,10 +42,7 @@ func check(t *testing.T, name string, got any, want string) {
 func ws(id, label, key, path string) Workspace {
 	w := Workspace{ID: id, Label: label}
 	if key != "" {
-		w.Worktree = &struct {
-			RepoRoot     *string `json:"repo_root"`
-			CheckoutPath *string `json:"checkout_path"`
-		}{ptr(strings.TrimSuffix(key, "/.git")), ptr(path)}
+		w.Worktree = &Worktree{ptr(strings.TrimSuffix(key, "/.git")), ptr(path)}
 	}
 	return w
 }
@@ -61,9 +58,7 @@ func ag(pane, status, sid, name, cwd string) SnapAgent {
 	a := SnapAgent{PaneID: pane, WorkspaceID: wsid, TabID: ptr(wsid + ":t1"), Agent: ptr("claude"), Status: status,
 		Cwd: ptr(cwd), Title: ptr("t"), Name: nilIfEmpty(name)}
 	if sid != "" {
-		a.AgentSession = &struct {
-			Value *string `json:"value"`
-		}{ptr(sid)}
+		a.Session = ptr(sid)
 	}
 	return a
 }

@@ -10,24 +10,10 @@ import (
 )
 
 // Workspaces lists Herdr's workspaces.
-func (e *Env) Workspaces() ([]core.Workspace, error) {
-	var r struct {
-		Result struct{ Workspaces []core.Workspace }
-	}
-	err := e.H.JSON(&r, "workspace", "list")
-	return r.Result.Workspaces, err
-}
+func (e *Env) Workspaces() ([]core.Workspace, error) { return e.H.Workspaces() }
 
-// Snapshot is `herdr api snapshot`.
-func (e *Env) Snapshot() (core.Snapshot, error) {
-	var r struct {
-		Result struct{ Snapshot *core.Snapshot }
-	}
-	if err := e.H.JSON(&r, "api", "snapshot"); err != nil || r.Result.Snapshot == nil {
-		return core.Snapshot{}, fmt.Errorf("herdr unreachable")
-	}
-	return *r.Result.Snapshot, nil
-}
+// Snapshot is the Host's view of every workspace and pane.
+func (e *Env) Snapshot() (core.Snapshot, error) { return e.H.Snapshot() }
 
 // claudeFlags are the flags Claude starts with after `--` in the workspace
 // labelled label: its model, and what its role allows. A Division's Agent may
