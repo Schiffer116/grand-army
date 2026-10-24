@@ -28,6 +28,9 @@ type Subject struct {
 	Limit, Idle              string // stopped on a usage limit / not
 	LimitSince, LimitReset   int64
 
+	// A pane's foreground process: the agent's, and another's.
+	Proc, OtherProc host.Process
+
 	// Hooks.
 	Submit, Stop, Permission, Question, Note, End, Start HookCase
 	Reason                                               string // the End hook's reason: a deliberate exit
@@ -95,6 +98,12 @@ func Contract(t *testing.T, s Subject) {
 		// An interrupt must leave the session alive: it is never what ends it.
 		if slices.Equal(h.Keys(harness.Interrupt), h.Keys(harness.End)) {
 			t.Error("Interrupt and End are the same keys")
+		}
+	})
+
+	t.Run("process", func(t *testing.T) {
+		if !h.Runs(s.Proc) || h.Runs(s.OtherProc) || h.Runs(host.Process{}) {
+			t.Errorf("Runs: %v for the agent, %v for another program, %v for none", h.Runs(s.Proc), h.Runs(s.OtherProc), h.Runs(host.Process{}))
 		}
 	})
 

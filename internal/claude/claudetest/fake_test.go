@@ -1,6 +1,7 @@
 package claudetest
 
 import (
+	"berthier/internal/host"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,8 @@ func TestFakeContract(t *testing.T) {
 		LimitReset: 2000,
 		Submit:     hook("submit"), Stop: hook("stop"), Permission: hook("permission"), Question: hook("question"),
 		Note: hook("note"), End: hook("end"), Start: hook("start"),
+		Proc:        host.Process{Name: "claude"},
+		OtherProc:   host.Process{Name: "vim"},
 		Reason:      "exit",
 		OtherReason: "killed",
 		HookSession: "s1",

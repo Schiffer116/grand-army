@@ -84,15 +84,11 @@ func (e *Env) launch(pane, name string, o harness.LaunchOpts) (string, error) {
 	deadline := time.Now().Add(time.Duration(e.StartTimeoutMS) * time.Millisecond)
 	ran := false
 	for {
-		a, err := e.Host.Pane(pane)
-		if err != nil {
-			return "", err
-		}
-		if a.Agent != nil && a.Status != "" {
+		if status, ok := e.announced(pane); ok {
 			if err := e.Host.RenamePane(pane, name); err != nil {
 				return "", err
 			}
-			return a.Status, nil
+			return status, nil
 		}
 		if p, err := e.Host.Process(pane); err == nil {
 			ran = ran || p.Alive()
@@ -164,10 +160,24 @@ func (e *Env) briefAfterDialogDetached(name, pane, brief string) {
 	}
 }
 
+// announced is the status a hook gave for the Agent in pane, false while none
+// has spoken since it started. (Unlike the Host's view of the pane, it never
+// falls back to what the Army knew of the pane before.)
+func (e *Env) announced(pane string) (string, bool) {
+	r := agentRecOf(e.Agents, pane)
+	if r == nil || r.exited() {
+		return "", false
+	}
+	if r.State == string(harness.Started) {
+		return string(harness.Idle), true
+	}
+	return r.State, true
+}
+
 // waitIdle waits until the Agent in pane is idle (BriefWait at most).
 func (e *Env) waitIdle(pane string) bool {
 	for deadline := time.Now().Add(e.BriefWait); time.Now().Before(deadline); time.Sleep(4 * e.PromptPoll) {
-		if a, err := e.Host.Pane(pane); err == nil && a.Status == "idle" {
+		if status, ok := e.announced(pane); ok && status == "idle" {
 			return true
 		}
 	}

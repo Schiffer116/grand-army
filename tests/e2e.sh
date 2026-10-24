@@ -110,6 +110,31 @@ bin/berthier tick
 (($(logged '.kind == "forgot" and .pane == $p' "$bare"))) || fail "transcript-less session not forgotten: $(tail -5 "$BERTHIER_HOME/loop.log"; jq -c --arg p "$bare" ".agents[\$p]" "$BERTHIER_HOME/state.json")"
 (($(logged '.kind == "revived" and .pane == $p' "$bare") == 0)) || fail "transcript-less session was Revived"
 
+step "cutover: a Claude started before the hooks existed is kept as it was, not Revived"
+# The loop restarts on a build with hooks while live Claudes have no record: the
+# first tick must not see them vanish (the Revive would be into a live Claude).
+mkdir -p "$work/old"
+old=$(h workspace create --cwd "$work/old" --label old --no-focus | jq -re '.result.root_pane.pane_id')
+h agent start old --kind claude --pane "$old" --timeout 60000 -- --model haiku >/dev/null 2>&1 || {
+  h agent send-keys old down enter >/dev/null
+  h agent wait old --until idle --timeout 60000 >/dev/null
+}
+old_sid=$(h agent get old | jq -r '.result.agent.agent_session.value')
+old_ws=$(h pane get "$old" | jq -re '.result.pane.workspace_id')
+for f in "$BERTHIER_HOME"/agents/*.json; do jq -e --arg p "$old" '.pane == $p' "$f" >/dev/null 2>&1 && rm -f "$f"; done
+# What the old build's last tick had written for it.
+bin/berthier tick
+jq --arg p "$old" --arg pane "$pane" --arg s "$old_sid" --arg w "$old_ws" \
+  '.agents[$p] = (.agents[$pane] | .session_id = $s | .name = "old" | .workspace_id = $w | .workspace_label = "old" | .status = "idle")' \
+  "$BERTHIER_HOME/state.json" >"$work/state.tmp" && mv "$work/state.tmp" "$BERTHIER_HOME/state.json"
+mark=$(wc -l <"$BERTHIER_HOME/loop.log")
+for _ in 1 2 3; do bin/berthier tick; sleep 1; done
+tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$work/since"
+(($(logged '.kind | startswith("revive")' "$old" "$work/since"))) && fail "unrecorded live Claude met a Revive: $(cat "$work/since")"
+jq -e --arg p "$old" '.agents[$p].status == "idle"' "$BERTHIER_HOME/state.json" >/dev/null \
+  || fail "unrecorded Agent not kept: $(jq -c --arg p "$old" '.agents[$p]' "$BERTHIER_HOME/state.json")"
+h workspace close "$old_ws" >/dev/null
+
 step "a cold big Agent that crashes is Frozen: not Revived, its messages held; a Fresh Start delivers them after"
 # Its own directory, where Bash is allowed: a Fresh Start's first turn runs berthier notes and git.
 mkdir -p "$work/cold/.claude"
@@ -156,7 +181,7 @@ echo "$out"
 [[ $out == *"Fresh Start: cold in $cold"* ]] || fail "fresh misreported: $out"
 new_sid=$(h agent get "$cold" | jq -r '.result.agent.agent_session.value // empty')
 [[ -n $new_sid && $new_sid != "$cold_sid" ]] || fail "no new session in the pane (got '$new_sid', was $cold_sid)"
-h pane read "$cold" --source recent-unwrapped --lines 200 | grep -qF "[berthier fresh] You were restarted fresh: run berthier notes" || fail "fresh prompt not in the pane"
+h pane read "$cold" --source recent-unwrapped --lines 200 | grep -qF "[berthier fresh] You were restarted fresh: run berthier notes" || fail "fresh prompt not in the pane: $(h pane read "$cold" --source recent-unwrapped --lines 40; tail -5 "$BERTHIER_HOME/loop.log" | cut -c1-300; for f in "$BERTHIER_HOME"/agents/*.json; do jq -c --arg p "$cold" 'select(.pane == $p)' "$f"; done)"
 for _ in $(seq 60); do
   frozen tick
   (($(logged '.kind == "delivered" and .pane == $p and .from == "service"' "$cold"))) && break
@@ -248,9 +273,16 @@ BERTHIER_DRAFT_QUIET=4 bin/berthier tick
 tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$work/since"
 (($(logged '.kind == "delivered" and .to == "demo"' "" "$work/since"))) && fail "ask delivered within the quiet period"
 sleep 4
-BERTHIER_DRAFT_QUIET=4 bin/berthier tick
+# One message per tick, and Agents answer asks with asks of their own (helper's
+# earlier "ack" may be waiting too): tick until ours has gone.
+for _ in $(seq 20); do
+  BERTHIER_DRAFT_QUIET=4 bin/berthier tick
+  grep -qsF 'Reply with just: later' "$BERTHIER_HOME"/inbox/*.json || break
+  h agent wait demo-main --timeout 90000 >/dev/null
+done
 tail -n "+$((mark + 1))" "$BERTHIER_HOME/loop.log" >"$work/since"
 (($(logged '.kind == "delivered" and .pane == $p and .from == "helper"' "$pane" "$work/since"))) || fail "held ask not delivered: $(cat "$work/since")"
+grep -qsF 'Reply with just: later' "$BERTHIER_HOME"/inbox/*.json && fail "held ask still in the inbox: $(cat "$work/since")"
 h agent wait demo-main --timeout 90000 >/dev/null
 # Submitted, not left in the box: Claude saved it as the user's prompt (the pane's wording varies).
 for _ in $(seq 30); do grep -qs '"content":"\[berthier ask\] from helper: Reply with just: later' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/"$sid".jsonl && break; sleep 1; done
@@ -427,7 +459,7 @@ step "wake clears only the Agents that were working at Shutdown, not the idle on
 start_agent() {
   local p
   p=$(h workspace create --cwd "$repo" --label "$1" --no-focus | jq -re '.result.root_pane.pane_id')
-  h pane run "$p" "claude --model haiku --settings '{\"permissions\":{\"allow\":[\"Bash\"]}}'" >/dev/null
+  h pane run "$p" "claude --model haiku --settings $work/hooks-bash.json" >/dev/null
   for _ in $(seq 30); do h agent get "$p" >/dev/null 2>&1 && break; sleep 1; done
   h agent wait "$p" --until idle --timeout 20000 >/dev/null 2>&1 || { # a folder trust dialog
     h agent send-keys "$p" down enter >/dev/null
@@ -453,7 +485,7 @@ for _ in $(seq 60); do # every Agent takes its Shutdown, then settles
   ls "$BERTHIER_HOME"/inbox/*shutdown* >/dev/null 2>&1 || break
   sleep 2
 done
-ls "$BERTHIER_HOME"/inbox/*shutdown* >/dev/null 2>&1 && fail "Shutdown not delivered to everyone: $(ls "$BERTHIER_HOME/inbox"; tail -5 "$BERTHIER_HOME/loop.log")"
+ls "$BERTHIER_HOME"/inbox/*shutdown* >/dev/null 2>&1 && fail "Shutdown not delivered to everyone: $(ls "$BERTHIER_HOME/inbox"; cat "$BERTHIER_HOME"/inbox/*shutdown-0.json; jq -c '.agents | map_values({name, status})' "$BERTHIER_HOME/state.json"; for f in "$BERTHIER_HOME"/agents/*.json; do cut -c1-200 "$f"; done; tail -5 "$BERTHIER_HOME/loop.log" | cut -c1-300)"
 h agent wait "$busy" --timeout 120000 >/dev/null
 h agent wait "$calm" --timeout 120000 >/dev/null
 sleep 3

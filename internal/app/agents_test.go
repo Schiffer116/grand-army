@@ -131,10 +131,12 @@ func TestTerminatedSessionHasGrace(t *testing.T) {
 	s := newSandbox(t)
 	pane := fakeHost(t, s, "takes")
 	s.host.Update(pane, func(p *hosttest.Pane) { p.Proc = host.Process{Name: "sh", AtShell: true} })
+	s.write("state.json", `{"updated_at":1,"agents":{"`+pane+`":{"kind":"claude","status":"idle","session_id":"s1"}}}`)
 	e := s.load()
 	s.recordExit(pane, "s1", "exited", "SessionEnd", "terminated")
 	eq(t, "in grace", snapAgents(t, e), "["+pane+":unknown:s1]")
-	e.Host = hooked{s.host, e.Agents, e.harness().DeliberateExit, 0, e.Restart}
+	e.ExitGrace = 0
+	e.Host = e.wrapHost(s.host, e.harness())
 	time.Sleep(1100 * time.Millisecond)
 	eq(t, "past grace", snapAgents(t, e), "[]")
 }
@@ -145,6 +147,7 @@ func TestRestartWindowHoldsASession(t *testing.T) {
 	s := newSandbox(t)
 	pane := fakeHost(t, s, "takes")
 	s.host.Update(pane, func(p *hosttest.Pane) { p.Proc = host.Process{Name: "sh", AtShell: true} })
+	s.write("state.json", `{"updated_at":1,"agents":{"`+pane+`":{"kind":"claude","status":"idle","session_id":"s1"}}}`)
 	e := s.load()
 	s.record(pane, "s1", "working", 0)
 	eq(t, "a crash", snapAgents(t, e), "[]")
@@ -152,4 +155,28 @@ func TestRestartWindowHoldsASession(t *testing.T) {
 	eq(t, "a restart", snapAgents(t, e), "["+pane+":unknown:s1]")
 	e.Restart.Store(0)
 	eq(t, "restart over", snapAgents(t, e), "[]")
+	s.write("state.json", `{"updated_at":1,"agents":{}}`)
+	e.Restart.Store(time.Now().Add(time.Minute).Unix())
+	eq(t, "a pane the Army gave up on stays given up on", snapAgents(t, e), "[]")
+}
+
+// What the Army knew of a pane before the hooks is not news of a launch: a
+// start waits for the new session's own hook, or the prompt that follows would
+// "take" on the change from the old state to the new.
+func TestLaunchWaitsForItsOwnHook(t *testing.T) {
+	s := newSandbox(t)
+	pane := fakeHost(t, s, "takes")
+	s.host.Update(pane, func(p *hosttest.Pane) { p.Proc = host.Process{Name: "claude"} })
+	s.write("state.json", `{"updated_at":1,"agents":{"`+pane+`":{"kind":"claude","status":"idle","session_id":"old","state_seq":7}}}`)
+	e := s.load()
+	if a, _ := e.Host.Pane(pane); a.Agent == nil {
+		t.Fatal("the Army forgot an Agent it had before the hooks")
+	}
+	if st, ok := e.announced(pane); ok {
+		t.Errorf("announced = %q before any hook", st)
+	}
+	s.record(pane, "new", "started", 0)
+	if st, ok := e.announced(pane); !ok || st != "idle" {
+		t.Errorf("announced = %q, %v after SessionStart", st, ok)
+	}
 }

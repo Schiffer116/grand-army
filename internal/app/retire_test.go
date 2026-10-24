@@ -124,6 +124,7 @@ func TestCorpsRetireAndReopen(t *testing.T) {
 		t.Errorf("reopen of a Corps that is not retired: %d %q", code, errs)
 	}
 	s.sim = agentsim.New(s.host, "takes")
+	s.sim.Record = s.record
 	out, errs, code = s.sh("", "corps-reopen", "corps")
 	creates := s.host.CallsTo("CreateWorkspace")
 	if last := creates[len(creates)-1]; len(creates) != 2 || last.Args[0] != repo || last.Args[1] != "corps" {

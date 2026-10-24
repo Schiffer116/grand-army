@@ -299,20 +299,8 @@ func Tick(in TickIn) TickOut {
 	prevEsc := in.Prev.Escalated
 
 	// --- Live agents: carry over memory (session id, timers, revive bookkeeping).
-	// A pane that still holds a Claude session with no agent listed is Herdr
-	// resuming it after a restart (a crash clears the pane's session): it is live.
-	agentPanes := map[string]bool{}
-	for _, a := range in.Snap.Agents {
-		agentPanes[a.PaneID] = true
-	}
-	listed := append([]SnapAgent(nil), in.Snap.Agents...)
-	for _, p := range in.Snap.Panes {
-		if p.Session != nil && !agentPanes[p.PaneID] {
-			listed = append(listed, p)
-		}
-	}
 	live := Agents{}
-	for _, a := range listed {
+	for _, a := range in.Snap.Agents {
 		p := prevAgents.Get(a.PaneID)
 		var pv Agent
 		if p != nil {
@@ -675,11 +663,7 @@ func Tick(in TickIn) TickOut {
 		if a.SessionID == nil {
 			continue
 		}
-		st := "unknown" // a pane Herdr is still resuming has no agent to prompt yet
-		if agentPanes[k] {
-			st = a.Status
-		}
-		bySession[*a.SessionID] = present{k, strOr(a.WorkspaceLabel, ""), st, a.StatusSince}
+		bySession[*a.SessionID] = present{k, strOr(a.WorkspaceLabel, ""), a.Status, a.StatusSince}
 	}
 	type back struct {
 		sid  string
@@ -689,8 +673,8 @@ func Tick(in TickIn) TickOut {
 	var backs, cutAgents, goAgents []back
 	for _, sid := range slices.Sorted(maps.Keys(waiting)) {
 		b, ok := bySession[sid]
-		// Herdr first lists a resumed pane with its stale status, then
-		// relaunches Claude: wait for the status to hold.
+		// A resumed session is first listed with its stale status, then
+		// relaunched: wait for the status to hold.
 		if ok && (b.status == "idle" || b.status == "done") && now-b.since >= orDefault(cfg.RestartSettle, 20) {
 			backs = append(backs, back{sid, waiting[sid].Name, b})
 		}

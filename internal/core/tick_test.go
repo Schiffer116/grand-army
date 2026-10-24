@@ -65,12 +65,9 @@ func ag(pane, status, sid, name, cwd string) SnapAgent {
 
 func seq(a SnapAgent, n int64) SnapAgent { a.StateSeq = &n; return a }
 
-// held is a pane that holds a session with no agent listed (Herdr resuming it).
-func held(pane, sid string) SnapAgent {
-	a := ag(pane, "unknown", sid, "", "")
-	a.Agent = nil
-	return a
-}
+// held is an Agent listed with an unknown status: its session ended without a
+// word and the Host is bringing it back.
+func held(pane, sid string) SnapAgent { return ag(pane, "unknown", sid, "", "") }
 
 func pn(p string) SnapAgent { return SnapAgent{PaneID: p} }
 
@@ -227,7 +224,7 @@ func cloneAgents(a Agents) Agents {
 
 func TestHerdrRestart(t *testing.T) {
 	prev := tick(State{}, snap(W, panes(ag("w1:p1", "idle", "sid-1", "principal", "")), panes(pn("w1:p1"))), 1000, opt{}).State
-	o := tick(prev, snap(W, nil, panes(held("w1:p1", "sid-1"))), 1010, opt{})
+	o := tick(prev, snap(W, panes(held("w1:p1", "sid-1")), panes(pn("w1:p1"))), 1010, opt{})
 	check(t, "restoring pane not revived", []int{len(o.Revive), len(o.Look)}, `[0,0]`)
 	a := o.State.Agents.M["w1:p1"]
 	check(t, "restoring pane kept", []any{a.Name, a.Kind, a.Status, a.SessionID}, `["principal","claude","unknown","sid-1"]`)
@@ -673,7 +670,7 @@ func TestRestartResume(t *testing.T) {
 	check(t, "no gap, nothing remembered", o.State.Interrupted, `{}`)
 	o = tick(pw, empty, 1100, g)
 	check(t, "gap remembers only the working", o.State.Interrupted, `{"sid-1":{"name":"principal","since":1100}}`)
-	o2 := tick(o.State, snap(W, nil, panes(held("w1:p1", "sid-1"))), 1110, g)
+	o2 := tick(o.State, snap(W, panes(held("w1:p1", "sid-1")), panes(pn("w1:p1"))), 1110, g)
 	keys := func(s State) []string {
 		k := []string{}
 		for x := range s.Interrupted {
@@ -694,7 +691,7 @@ func TestRestartResume(t *testing.T) {
 	}
 	hi := held("w1:p1", "sid-1")
 	hi.Status = "idle"
-	o3 := tick(o2.State, snap(W, nil, panes(hi)), 1115, g)
+	o3 := tick(o2.State, snap(W, panes(hi), panes(pn("w1:p1"))), 1115, g)
 	check(t, "held pane with a status is not prompted yet", []any{reads(o3), keys(o3.State)}, `[[],["sid-1"]]`)
 	si := snap(W, panes(ag("w1:p1", "idle", "sid-1", "", "")), panes(pn("w1:p1")))
 	o3 = tick(o2.State, si, 1120, g)

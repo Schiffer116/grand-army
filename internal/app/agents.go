@@ -121,8 +121,15 @@ type hooked struct {
 	host.Host
 	dir        string
 	deliberate func(reason string) bool
+	runs       func(host.Process) bool
 	grace      time.Duration
-	until      *atomic.Int64 // unix seconds: a restart is on until then
+	until      *atomic.Int64      // unix seconds: a restart is on until then
+	prior      func() core.Agents // the Agents the last tick saw
+}
+
+// wrapHost is h with the Agents of c's hooks.
+func (e *Env) wrapHost(h host.Host, c harness.Harness) hooked {
+	return hooked{h, e.Agents, c.DeliberateExit, c.Runs, e.ExitGrace, e.Restart, func() core.Agents { return e.ReadState().Agents }}
 }
 
 // agent is p with its Agent filled in from rec (nil: none), or false when the
@@ -130,10 +137,10 @@ type hooked struct {
 func (h hooked) agent(p core.SnapAgent, rec *AgentRec) (core.SnapAgent, bool) {
 	p.Agent, p.Status, p.Session, p.StateSeq = nil, "", nil, nil
 	if rec == nil {
-		return p, false
+		return h.unrecorded(p)
 	}
 	if rec.exited() {
-		if rec.Reason == "" || h.deliberate(rec.Reason) || time.Since(time.Unix(rec.At, 0)) > h.grace {
+		if rec.Reason == "" || h.deliberate(rec.Reason) || time.Since(time.Unix(rec.At, 0)) > h.grace || !h.known(p.PaneID) {
 			return p, false
 		}
 		kind, seq, sid := "claude", rec.Seq, rec.Session
@@ -141,7 +148,7 @@ func (h hooked) agent(p core.SnapAgent, rec *AgentRec) (core.SnapAgent, bool) {
 		return p, true
 	}
 	if pr, err := h.Host.Process(p.PaneID); err == nil && pr.AtShell {
-		if h.until == nil || time.Now().Unix() >= h.until.Load() {
+		if h.until == nil || time.Now().Unix() >= h.until.Load() || !h.known(p.PaneID) {
 			return p, false
 		}
 		kind, seq, sid := "claude", rec.Seq, rec.Session
@@ -154,6 +161,35 @@ func (h hooked) agent(p core.SnapAgent, rec *AgentRec) (core.SnapAgent, bool) {
 		status = string(harness.Idle)
 	}
 	p.Agent, p.Status, p.Session, p.StateSeq = &kind, status, &sid, &seq
+	return p, true
+}
+
+// known: did the last tick have an Agent in pane? Only those can be on their
+// way back; a pane the Army gave up on stays given up on.
+func (h hooked) known(pane string) bool {
+	prior := h.prior()
+	return prior.Get(pane) != nil
+}
+
+// unrecorded is a pane no hook ever spoke for: an Agent the Army had before
+// hooks existed (or whose Claude started before they were registered) keeps
+// the state and session it had, as long as its Claude runs; hooks take over
+// when it next has a turn. A pane the Army did not know as an Agent has none.
+func (h hooked) unrecorded(p core.SnapAgent) (core.SnapAgent, bool) {
+	prior := h.prior()
+	a := prior.Get(p.PaneID)
+	if a == nil || a.Kind == nil || *a.Kind != "claude" {
+		return p, false
+	}
+	if pr, err := h.Host.Process(p.PaneID); err == nil && !h.runs(pr) {
+		return p, false
+	}
+	status := a.Status
+	if status == "gone" {
+		status = "unknown"
+	}
+	kind := "claude"
+	p.Agent, p.Status, p.Session, p.StateSeq = &kind, status, a.SessionID, a.StateSeq
 	return p, true
 }
 

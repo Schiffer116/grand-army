@@ -111,6 +111,9 @@ func (Fake) UsageLimit(screen string, since int64, local *time.Location) (int64,
 	return 0, false
 }
 
+// Runs: a process named claude.
+func (Fake) Runs(p host.Process) bool { return p.Name == "claude" }
+
 // DeliberateExit: the reason "exit".
 func (Fake) DeliberateExit(reason string) bool { return reason == "exit" }
 

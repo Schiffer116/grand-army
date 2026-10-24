@@ -176,7 +176,7 @@ func LoadEnv(getenv func(string) string) Env {
 	e.BriefWait = time.Duration(num("BERTHIER_BRIEF_WAIT", 3600) * float64(time.Second))
 	e.ExitGrace = time.Duration(num("BERTHIER_EXIT_GRACE", 30) * float64(time.Second))
 	e.Restart = new(atomic.Int64)
-	e.Host = hooked{herdr.FromEnv(getenv), e.Agents, claude.Claude{}.DeliberateExit, e.ExitGrace, e.Restart}
+	e.Host = e.wrapHost(herdr.FromEnv(getenv), claude.Claude{})
 	e.ClaudeSettings = getenv("BERTHIER_CLAUDE_SETTINGS")
 	e.ClaudeDir = str("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	// `land` restarts services with this and waits up to LandWait for them to work.

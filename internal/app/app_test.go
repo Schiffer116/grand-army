@@ -34,7 +34,7 @@ func newSandbox(t *testing.T) *sandbox {
 // reads the screens its Agents draw.
 func (s *sandbox) inject(e *Env) {
 	if s.host != nil {
-		e.Host = hooked{s.host, e.Agents, claudetest.Fake{}.DeliberateExit, e.ExitGrace, e.Restart}
+		e.Host = e.wrapHost(s.host, claudetest.Fake{})
 	}
 	if s.sim != nil {
 		e.Harness = claudetest.Fake{Dir: filepath.Join(s.home, "claude")}

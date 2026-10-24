@@ -129,3 +129,39 @@ func TestTickRestoresAForgottenName(t *testing.T) {
 	}
 	eq(t, "named again", len(events(s, "renamed")), 1)
 }
+
+// Cutover: Claudes started before the hooks existed have no record. The new
+// loop's first tick keeps them as the last tick saw them, instead of finding
+// them vanished and Reviving; a hook then takes over.
+func TestTickCutoverKeepsUnrecordedAgents(t *testing.T) {
+	s := newSandbox(t)
+	pane := fakeHost(t, s, "takes")
+	s.sim.Attach(pane)
+	s.host.Update(pane, func(p *hosttest.Pane) { name := "demo"; p.Name = &name })
+	e := s.load()
+	tr := filepath.Join(s.home, "claude", "projects", "p")
+	os.MkdirAll(tr, 0o755)
+	os.WriteFile(filepath.Join(tr, "s1.jsonl"), []byte(fmt.Sprintf("user hi\ncall %d fake-1 1000\n", e.now())), 0o644)
+	// What the old build's last tick wrote: the Agent, idle, from Herdr's status.
+	if err := e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(e.Agents) // the hooks never spoke for it
+	os.MkdirAll(e.Agents, 0o755)
+	for i := 0; i < 3; i++ {
+		if err := e.Tick(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eq(t, "still its Agent, as it was", jq(t, s.read("state.json"), "agents."+pane+".status"), `"idle"`)
+	eq(t, "no Revive, not even a skipped one", len(events(s, "revive_skipped"))+len(events(s, "revived"))+len(s.host.CallsTo("Start")), 0)
+	// A hook takes over.
+	s.record(pane, "s1", "working", 1)
+	e.Tick()
+	eq(t, "hook state wins", jq(t, s.read("state.json"), "agents."+pane+".status"), `"working"`)
+	// A pane that was never an Agent stays none.
+	other, _ := s.host.CreateWorkspace(t.TempDir(), "other")
+	s.host.Update(other.PaneID, func(p *hosttest.Pane) { p.Proc = host.Process{Name: "claude"} })
+	e.Tick()
+	eq(t, "unknown claude pane is none", jq(t, s.read("state.json"), "agents."+other.PaneID), "null")
+}

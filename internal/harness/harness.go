@@ -134,6 +134,8 @@ type Harness interface {
 	// seconds)? since is when the stop was first seen; local is the zone used
 	// when the screen names none.
 	UsageLimit(screen string, since int64, local *time.Location) (reset int64, ok bool)
+	// Runs: is p, the foreground process of a pane, this agent program?
+	Runs(p host.Process) bool
 	// DeliberateExit: is reason, the one a session-ended hook gave, the user's
 	// own choice (/exit, logout) rather than something to recover from? A crash
 	// gives no reason at all.

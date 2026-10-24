@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"berthier/internal/host"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,8 @@ func TestContract(t *testing.T) {
 		Note:        hook("Notification", `,"notification_type":"idle_prompt","message":"Claude is waiting for your input"`),
 		End:         hook("SessionEnd", `,"reason":"prompt_input_exit"`),
 		Start:       hook("SessionStart", `,"source":"startup"`),
+		Proc:        host.Process{Name: "claude"},
+		OtherProc:   host.Process{Name: "vim"},
 		Reason:      "prompt_input_exit",
 		OtherReason: "other",
 		HookSession: "s1",

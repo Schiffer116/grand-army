@@ -5,6 +5,7 @@ package claude
 
 import (
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,6 +61,9 @@ func (Claude) PromptHeld(screen, text string) bool { return InputHolds(screen, t
 func (Claude) UsageLimit(screen string, since int64, local *time.Location) (int64, bool) {
 	return UsageLimitReset(screen, since, local)
 }
+
+// Runs: a process named claude.
+func (Claude) Runs(p host.Process) bool { return p.Alive() && strings.Contains(p.Name, "claude") }
 
 // DeliberateExit: Claude Code's SessionEnd reasons that the user chose.
 func (Claude) DeliberateExit(reason string) bool {
