@@ -142,13 +142,10 @@ func (e *Env) freshStart(f core.FreshStart) {
 	}
 	report := e.ReadReports()[f.Session].Line
 	brief := ""
-	model := f.Model
+	model := cmp.Or(e.stickyModel(f.Label, f.Session), f.Model)
 	if f.Division != "" {
 		if b, err := os.ReadFile(e.briefFile(f.Division)); err == nil {
 			brief = strings.TrimSpace(string(b))
-		}
-		if model == "" {
-			model = e.ModelOf(f.Division)
 		}
 	}
 	var warn string

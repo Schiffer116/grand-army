@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"berthier/internal/core"
 	"berthier/internal/host"
 	"berthier/internal/host/hosttest"
 )
@@ -51,7 +52,7 @@ func TestTickRevivesADeadAgent(t *testing.T) {
 	if err := e.Tick(); err != nil {
 		t.Fatal(err)
 	}
-	eq(t, "resumed in its pane", startArgs(s), "fake-agent --resume s1 --model opus")
+	eq(t, "resumed in its pane", startArgs(s), "fake-agent --resume s1 --model fake-1")
 	if got := s.host.CallsTo("Start")[0].Args[0]; got != pane {
 		t.Errorf("started in %s, want %s", got, pane)
 	}
@@ -96,4 +97,19 @@ func TestTickHostDown(t *testing.T) {
 	if err := e.Tick(); err != ErrHostUnreachable {
 		t.Errorf("Tick = %v, want ErrHostUnreachable", err)
 	}
+}
+
+// A restarted Agent runs on the model its transcript last called; the Division's
+// recorded model is the fallback and follows the transcript.
+func TestStickyModel(t *testing.T) {
+	s := newSandbox(t)
+	fakeHost(t, s, "takes")
+	e := s.load()
+	e.SetDivision("feat", &core.Division{Corps: "demo", Model: "haiku"})
+	tr := filepath.Join(s.home, "claude", "projects", "p")
+	os.MkdirAll(tr, 0o755)
+	eq(t, "no transcript: recorded", e.stickyModel("feat", "s9"), "haiku")
+	os.WriteFile(filepath.Join(tr, "s9.jsonl"), []byte(fmt.Sprintf("user hi\ncall %d fake-1 1000\n", e.now())), 0o644)
+	eq(t, "transcript wins", e.stickyModel("feat", "s9"), "fake-1")
+	eq(t, "record follows", e.ModelOf("feat"), "fake-1")
 }

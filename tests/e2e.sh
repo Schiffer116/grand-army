@@ -377,11 +377,14 @@ model_of() { tr '\0' ' ' <"/proc/$(claude_pid "$dpane")/cmdline"; }
 [[ $(model_of) == *"--model haiku"* ]] || fail "division not running --model haiku: $(model_of)"
 [[ $(model_of) == *"--disallowedTools Artifact"* ]] || fail "division may use Artifact: $(model_of)"
 bin/berthier tick
+# The recorded model went stale (e.g. a /model switch): a Revive follows the transcript, and the record with it.
+jq '.["dark-mode"].model = "sonnet"' "$BERTHIER_HOME/divisions.json" >"$BERTHIER_HOME/divisions.tmp" && mv "$BERTHIER_HOME/divisions.tmp" "$BERTHIER_HOME/divisions.json"
 kill -KILL "$(claude_pid "$dpane")"
 sleep 3
 bin/berthier tick
 for _ in $(seq 30); do claude_pid "$dpane" 2>/dev/null | grep -q . && break; sleep 1; done
-[[ $(model_of) == *"--resume"*"--model haiku"*"--disallowedTools Artifact"* ]] || fail "revived division lost its flags: $(model_of)"
+[[ $(model_of) == *"--resume"*"--model claude-haiku"*"--disallowedTools Artifact"* ]] || fail "revived division not on its transcript's model, or lost its flags: $(model_of)"
+jq -e '.["dark-mode"].model | startswith("claude-haiku")' "$BERTHIER_HOME/divisions.json" >/dev/null || fail "division model record did not follow the transcript"
 bin/berthier tick
 jq -e '.corps[] | select(.name == "demo") | any(.divisions[]; .name == "dark-mode" and .worktree)' "$BERTHIER_HOME/state.json" >/dev/null \
   || fail "state does not show the division under demo"

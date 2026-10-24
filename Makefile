@@ -10,7 +10,7 @@ build: ## Build bin/berthier
 test: ## Unit tests (go test ./...)
 	go test ./...
 
-e2e: ## E2E against a real Herdr and Claude haiku (~1 min)
+e2e: ## E2E against a real Herdr and Claude haiku (~4.5 min)
 	tests/e2e.sh
 
 lint: ## go vet, and fail if gofmt has changes

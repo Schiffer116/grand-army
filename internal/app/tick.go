@@ -75,7 +75,7 @@ func (e *Env) Tick() error {
 		if a := out.State.Agents.Get(r.PaneID); a != nil {
 			label = strOr(a.WorkspaceLabel)
 		}
-		opts := e.launchOpts(label, e.ModelOf(label))
+		opts := e.launchOpts(label, e.stickyModel(label, r.SessionID))
 		opts.Resume = r.SessionID
 		// A start that fails at once (e.g. "No conversation found") leaves the
 		// pane back at its shell.
@@ -274,13 +274,7 @@ func (e *Env) look(l core.Look, now int64, o core.Obs) core.Obs {
 			b := e.transcriptInterrupted(sid)
 			o.Interrupted = &b
 		case "cache":
-			// Unknown (no transcript) is a zero Cache: small, so resumed as before.
-			c := core.Cache{}
-			if m := e.transcriptFiles(sid); len(m) > 0 {
-				if c, _ = e.harness().CacheOf(TailLines(m[0], 200)); c.LastAt == 0 {
-					c, _ = e.harness().CacheOf(TailLines(m[0], 5000))
-				}
-			}
+			c := e.transcriptCache(sid)
 			o.Cache = &c
 		case "auto_fresh":
 			o.Auto = e.autoCheck(l.PaneID)
@@ -316,3 +310,32 @@ func (e *Env) transcriptFiles(sid string) []string { return e.harness().Transcri
 
 // hasTranscript: Claude can only resume a session it saved.
 func (e *Env) hasTranscript(sid string) bool { return len(e.transcriptFiles(sid)) > 0 }
+
+// transcriptCache is session sid's prompt cache, read from its transcript.
+// Unknown (no transcript) is a zero Cache: small, so resumed as before.
+func (e *Env) transcriptCache(sid string) core.Cache {
+	c := core.Cache{}
+	if m := e.transcriptFiles(sid); len(m) > 0 {
+		if c, _ = e.harness().CacheOf(TailLines(m[0], 200)); c.LastAt == 0 {
+			c, _ = e.harness().CacheOf(TailLines(m[0], 5000))
+		}
+	}
+	return c
+}
+
+// stickyModel is the model a restarted Agent of the workspace labelled label
+// runs on: the one its session's transcript last called (a /model switch
+// sticks), else the one recorded for its Division. A Division's record follows
+// the transcript.
+func (e *Env) stickyModel(label, session string) string {
+	recorded := e.ModelOf(label)
+	m := e.transcriptCache(session).Model
+	if m == "" {
+		return recorded
+	}
+	if d, ok := e.ReadDivisions()[core.CorpsName(label)]; ok && d.Model != m {
+		d.Model = m
+		e.SetDivision(core.CorpsName(label), &d)
+	}
+	return m
+}
